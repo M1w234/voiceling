@@ -120,8 +120,7 @@ final class HotkeyMenuItemView: NSView {
 
         let newConfig = HotkeyConfig(
             keyCode: UInt32(event.keyCode),
-            modifiers: carbonMods,
-            mode: AppState.shared.hotkey.mode
+            modifiers: carbonMods
         )
         AppState.shared.hotkey = newConfig
         newConfig.save()

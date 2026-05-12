@@ -1,39 +1,28 @@
 import Carbon.HIToolbox
 import Foundation
 
-enum HotkeyMode: String, Codable {
-    case tapToToggle
-    case holdToTalk
-}
-
 struct HotkeyConfig: Codable, Equatable {
     var keyCode: UInt32
     var modifiers: UInt32
-    var mode: HotkeyMode
 
-    init(keyCode: UInt32, modifiers: UInt32, mode: HotkeyMode = .tapToToggle) {
+    init(keyCode: UInt32, modifiers: UInt32) {
         self.keyCode = keyCode
         self.modifiers = modifiers
-        self.mode = mode
     }
 
     static let defaultHotkey = HotkeyConfig(
         keyCode: UInt32(kVK_ANSI_T),
-        modifiers: UInt32(cmdKey),
-        mode: .tapToToggle
+        modifiers: UInt32(cmdKey)
     )
 
     private static let defaultsKey = "yaprflow.hotkey.v1"
 
+    // Only `keyCode` and `modifiers` are coded. Older builds also persisted
+    // a `mode` field (`tapToToggle` / `holdToTalk` / `doubleTapToLock`) —
+    // by omitting it from CodingKeys the decoder silently ignores those
+    // values, so a downgrade-and-upgrade round-trip doesn't break load().
     private enum CodingKeys: String, CodingKey {
-        case keyCode, modifiers, mode
-    }
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.keyCode = try c.decode(UInt32.self, forKey: .keyCode)
-        self.modifiers = try c.decode(UInt32.self, forKey: .modifiers)
-        self.mode = try c.decodeIfPresent(HotkeyMode.self, forKey: .mode) ?? .tapToToggle
+        case keyCode, modifiers
     }
 
     func save() {
@@ -53,7 +42,6 @@ struct HotkeyConfig: Codable, Equatable {
         if modifiers & UInt32(shiftKey) != 0   { s += "⇧" }
         if modifiers & UInt32(cmdKey) != 0     { s += "⌘" }
         s += Self.name(for: keyCode)
-        if mode == .holdToTalk { s += "  (hold)" }
         return s
     }
 

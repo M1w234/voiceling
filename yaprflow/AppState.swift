@@ -19,6 +19,7 @@ final class AppState: ObservableObject {
     private static let streamingModeKey = "yaprflow.streamingMode"
     private static let grammarModeKey = "yaprflow.grammarMode"
     private static let autoPasteModeKey = "yaprflow.autoPasteMode"
+    private static let screenContextModeKey = "yaprflow.screenContextMode"
     private static let soundEffectsEnabledKey = "yaprflow.soundEffectsEnabled"
     private static let lastTranscriptKey = "yaprflow.lastTranscript"
 
@@ -53,6 +54,20 @@ final class AppState: ObservableObject {
     @Published var autoPasteMode: Bool {
         didSet {
             UserDefaults.standard.set(autoPasteMode, forKey: Self.autoPasteModeKey)
+        }
+    }
+
+    /// When `true`, capture a small window of text around the cursor at
+    /// recording start and feed it to the on-device grammar polish so the
+    /// LLM can prefer spellings already on the screen ("fleet view" →
+    /// "FleetView"). Uses the same Accessibility permission as auto-paste.
+    /// Defaults to off — reading text out of other apps is a meaningfully
+    /// different privacy posture than the existing features and shouldn't
+    /// turn itself on. Browsers, mail, messages, and password managers are
+    /// hard-denied at capture time regardless of this toggle.
+    @Published var screenContextMode: Bool {
+        didSet {
+            UserDefaults.standard.set(screenContextMode, forKey: Self.screenContextModeKey)
         }
     }
 
@@ -98,6 +113,11 @@ final class AppState: ObservableObject {
             self.autoPasteMode = stored
         } else {
             self.autoPasteMode = false
+        }
+        if let stored = UserDefaults.standard.object(forKey: Self.screenContextModeKey) as? Bool {
+            self.screenContextMode = stored
+        } else {
+            self.screenContextMode = false
         }
         if let stored = UserDefaults.standard.object(forKey: Self.soundEffectsEnabledKey) as? Bool {
             self.soundEffectsEnabled = stored

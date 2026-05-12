@@ -1,5 +1,8 @@
 import AppKit
+import OSLog
 import SwiftUI
+
+private let hotkeyLog = Logger(subsystem: "com.tmoreton.yaprflow", category: "Hotkey")
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
@@ -34,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         ) { _ in
             MainActor.assumeIsolated {
                 let config = AppState.shared.hotkey
-                self.wireHotkeyCallbacks(for: config.mode)
+                self.wireHotkeyCallbacks()
                 GlobalHotkey.shared.register(keyCode: config.keyCode, modifiers: config.modifiers)
             }
         }
@@ -61,11 +64,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         shortcutItem.view = HotkeyMenuItemView()
         menu.addItem(shortcutItem)
 
-        let triggerItem = NSMenuItem()
-        triggerItem.view = HotkeyModeMenuItemView()
-        triggerItem.toolTip = "Tap to Toggle: press once to start, again to stop. Hold to Talk: hold the shortcut while you speak, release to stop."
-        menu.addItem(triggerItem)
-
         menu.addItem(NSMenuItem.separator())
 
         let streamingItem = NSMenuItem()
@@ -82,6 +80,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         autoPasteItem.view = AutoPasteMenuItemView()
         autoPasteItem.toolTip = "After transcription, automatically paste into the focused text field. Requires Accessibility permission (System Settings → Privacy & Security → Accessibility)."
         menu.addItem(autoPasteItem)
+
+        let screenContextItem = NSMenuItem()
+        screenContextItem.view = ScreenContextMenuItemView()
+        screenContextItem.toolTip = "Reads a short window of text near your cursor (≈700 chars) and feeds it to the on-device grammar polish so it can spell proper nouns and brand names already on screen. Browsers, mail, messages, and password managers are skipped automatically. Stays on your Mac."
+        menu.addItem(screenContextItem)
 
         let soundEffectsItem = NSMenuItem()
         soundEffectsItem.view = SoundEffectsMenuItemView()
@@ -197,30 +200,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     private func registerHotkey() {
         let config = AppState.shared.hotkey
-        wireHotkeyCallbacks(for: config.mode)
+        wireHotkeyCallbacks()
         GlobalHotkey.shared.register(keyCode: config.keyCode, modifiers: config.modifiers)
     }
 
-    private func wireHotkeyCallbacks(for mode: HotkeyMode) {
-        switch mode {
-        case .tapToToggle:
-            GlobalHotkey.onPressed = {
-                Task { @MainActor in
-                    TranscriptionController.shared.toggle()
-                }
-            }
-            GlobalHotkey.onReleased = nil
-        case .holdToTalk:
-            GlobalHotkey.onPressed = {
-                Task { @MainActor in
-                    TranscriptionController.shared.setActive(true)
-                }
-            }
-            GlobalHotkey.onReleased = {
-                Task { @MainActor in
-                    TranscriptionController.shared.setActive(false)
-                }
-            }
+    private func wireHotkeyCallbacks() {
+        // Reset state machine on every (re)wire so re-recording the hotkey
+        // mid-session can't leave a stale lock or pending double-tap window.
+        isLocked = false
+        lastPressDownTime = nil
+
+        GlobalHotkey.onPressed = { [weak self] in
+            Task { @MainActor in self?.handlePress() }
         }
+        GlobalHotkey.onReleased = { [weak self] in
+            Task { @MainActor in self?.handleRelease() }
+        }
+    }
+
+    // MARK: - Hybrid hold-to-talk + double-tap-to-lock state machine
+
+    /// Maximum press-down to press-down gap that's recognized as a double-
+    /// tap. Tuned tight enough that ordinary hold-to-talk usage (which is
+    /// almost always >350 ms between distinct presses) doesn't accidentally
+    /// engage the lock, but loose enough that a deliberate quick double-tap
+    /// reliably triggers.
+    private static let doubleTapInterval: CFTimeInterval = 0.35
+
+    /// True while a recording is in "locked" mode — initiated by a double-
+    /// tap, stays on through the release of the second press, and stays on
+    /// until the user taps once more to stop.
+    private var isLocked = false
+
+    /// Timestamp of the most recent press-down. Used by the next press-down
+    /// to decide whether this is the second half of a double-tap. Kept
+    /// across the press_up of the first tap (release doesn't clear it) so
+    /// the gesture is "press-release-press" not "press-press."
+    private var lastPressDownTime: CFTimeInterval?
+
+    private func handlePress() {
+        let now = CACurrentMediaTime()
+
+        // A locked recording is stopped by any subsequent press. Act on
+        // press-down (not release) so the stop fires at the moment the
+        // user clicks, with no perceptible lag.
+        if isLocked {
+            hotkeyLog.info("press: locked → stop")
+            TranscriptionController.shared.setActive(false)
+            isLocked = false
+            lastPressDownTime = nil
+            return
+        }
+
+        // Two interpretations are possible for this press: hold-to-talk
+        // start, OR the second half of a double-tap. We can't yet tell
+        // which — so we always start recording (hold-to-talk semantics)
+        // and, if the gap from the previous press-down is short enough,
+        // promote to locked. The brief overlap (~50–200 ms of audio
+        // captured before the lock) is in front of any real speech and
+        // gets trimmed by VAD.
+        let gap = lastPressDownTime.map { now - $0 } ?? -1
+        let withinDoubleTap = lastPressDownTime
+            .map { now - $0 < Self.doubleTapInterval } ?? false
+
+        if withinDoubleTap {
+            hotkeyLog.info("press: double-tap (gap=\(gap, format: .fixed(precision: 3))s) → lock")
+            TranscriptionController.shared.setActive(true)
+            isLocked = true
+            lastPressDownTime = nil
+        } else {
+            hotkeyLog.info("press: hold-to-talk start (gap=\(gap, format: .fixed(precision: 3))s)")
+            TranscriptionController.shared.setActive(true)
+            lastPressDownTime = now
+        }
+    }
+
+    private func handleRelease() {
+        // Locked recording stays running after release.
+        if isLocked {
+            hotkeyLog.info("release: locked, recording continues")
+            return
+        }
+        // Hold-to-talk semantics: release stops. We deliberately leave
+        // `lastPressDownTime` set — a press_down inside the double-tap
+        // window after this release is what completes the gesture.
+        hotkeyLog.info("release: hold-to-talk stop")
+        TranscriptionController.shared.setActive(false)
     }
 }

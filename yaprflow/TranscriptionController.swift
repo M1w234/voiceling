@@ -64,6 +64,12 @@ final class TranscriptionController {
     /// suppressed for this session (yaprflow was frontmost, or capture failed).
     private var sessionFrontmostPID: pid_t?
 
+    /// Off-main capture of text-near-cursor for the grammar polish. Fires in
+    /// start(), result is consumed in stop()'s grammar Task. The store never
+    /// blocks the polish path; missing context just means the grammar call
+    /// runs without a hint and the user gets normal correction.
+    private let screenContextStore = ScreenContextStore()
+
     // Long maxSpeechDuration (60s) for continuous dictation without forced chunks.
     // Silence-based segmentation handles natural pauses.
     private let segmentationConfig = VadSegmentationConfig(
@@ -183,6 +189,21 @@ final class TranscriptionController {
         currentSessionID = UUID()
         sessionFrontmostPID = Self.captureFrontmostExcludingSelf()
 
+        // Fire screen-context capture in parallel. Off-main, fire-and-forget;
+        // the polish path reads whatever has landed by then. If the user
+        // disabled the feature, clear any stale capture from a prior session
+        // so it can't be picked up if they re-enable mid-session.
+        if state.screenContextMode, let targetPID = sessionFrontmostPID {
+            let appName = NSWorkspace.shared.frontmostApplication?.localizedName
+            screenContextStore.startCapture(
+                sessionID: currentSessionID,
+                targetPID: targetPID,
+                appName: appName
+            )
+        } else {
+            screenContextStore.clear()
+        }
+
         NotchOverlayWindowController.shared.show()
 
         do {
@@ -255,6 +276,7 @@ final class TranscriptionController {
             let sessionID = currentSessionID
             let targetPID = sessionFrontmostPID
             let autoPasteEnabled = state.autoPasteMode
+            let screenContextEnabled = state.screenContextMode
 
             if state.grammarMode {
                 // Grammar mode: copy original first, then corrected overwrites
@@ -270,7 +292,21 @@ final class TranscriptionController {
 
                 Task { @MainActor in
                     do {
-                        let corrected = try await GrammarController.shared.correct(text: finalText) { msg in
+                        // Decide whether to use screen context for this
+                        // polish. Re-check focus PID HERE (not at start) —
+                        // the user may have ⌘Tab'd away during recording, in
+                        // which case the captured snapshot is irrelevant.
+                        var contextForPolish: ScreenContext? = nil
+                        if screenContextEnabled,
+                           let target = targetPID,
+                           NSWorkspace.shared.frontmostApplication?.processIdentifier == target {
+                            contextForPolish = self.screenContextStore.contextIfReady(for: sessionID)
+                        }
+
+                        let corrected = try await GrammarController.shared.correct(
+                            text: finalText,
+                            context: contextForPolish
+                        ) { msg in
                             self.state.status = .correcting(msg)
                         }
                         // Stale-session guard: a new dictation may have
