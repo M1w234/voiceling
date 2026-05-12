@@ -16,7 +16,21 @@ if [ ! -d "$ROOT/Models/parakeet-tdt-0.6b-v2/Encoder.mlmodelc" ]; then
     exit 1
 fi
 
-echo "==> Building yaprflow (Release, ad-hoc)…"
+# Detect whether the local self-signed identity is set up. We can't pass it
+# straight to xcodebuild — SPM packages without a development team blow up
+# when CODE_SIGNING_ALLOWED=YES. Instead we build everything unsigned (same
+# as before) and re-sign just the final .app afterwards with `codesign`,
+# which only touches our bundle.
+LOCAL_SIGN_IDENTITY="Yaprflow Local Dev"
+HAS_LOCAL_SIGN_IDENTITY=false
+if security find-identity -v -p codesigning 2>/dev/null | grep -q "$LOCAL_SIGN_IDENTITY"; then
+    HAS_LOCAL_SIGN_IDENTITY=true
+    echo "==> Building yaprflow (Release; will re-sign with '$LOCAL_SIGN_IDENTITY')…"
+else
+    echo "==> Building yaprflow (Release, ad-hoc)…"
+    echo "    Run ./scripts/setup-local-signing.sh once to get stable AX permissions."
+fi
+
 xcodebuild \
     -project yaprflow.xcodeproj \
     -scheme yaprflow \
@@ -30,6 +44,18 @@ xcodebuild \
 if [ ! -d "$APP" ]; then
     echo "❌ Build succeeded but .app not found at $APP" >&2
     exit 1
+fi
+
+# Re-sign the .app with the stable local identity if available. Doing this
+# AFTER the build (instead of via xcodebuild) so SPM dependencies stay
+# unsigned and we only stamp our own bundle. Entitlements have to be re-
+# applied explicitly because the unsigned build doesn't embed them.
+if [ "$HAS_LOCAL_SIGN_IDENTITY" = true ]; then
+    echo "==> Re-signing .app with '$LOCAL_SIGN_IDENTITY'…"
+    codesign --force --deep --options runtime \
+        --sign "$LOCAL_SIGN_IDENTITY" \
+        --entitlements "$ROOT/yaprflow/yaprflow.entitlements" \
+        "$APP"
 fi
 
 echo "==> Quitting running yaprflow…"
