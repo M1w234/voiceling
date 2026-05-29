@@ -12,8 +12,8 @@ import SwiftUI
 ///     manipulate it first.
 ///
 /// **Keyboard:** `↑` `↓` navigate rows; `Esc` dismisses; right-click brings up
-/// pin / delete actions per row. Hover reveals a trash icon at the trailing
-/// edge as a mouse-friendly delete affordance.
+/// pin / delete actions per row. Hover reveals a copy icon at the trailing
+/// edge for copy-only activation.
 ///
 /// Modifier detection is via `NSEvent.modifierFlags` at the moment the gesture
 /// fires — SwiftUI doesn't expose modifier state on `.onTapGesture` directly,
@@ -120,12 +120,6 @@ struct ClipboardHistoryView: View {
                                 onDelete: { store.delete(entry) }
                             )
                             .id(entry.id)
-                            .onTapGesture {
-                                onActivate(entry, Self.optionDown())
-                            }
-                            .onHover { hovering in
-                                if hovering { selection = entry.id }
-                            }
                         }
                     }
                 }
@@ -203,12 +197,16 @@ struct ClipboardHistoryView: View {
 private struct HistoryRow: View {
     let entry: ClipboardHistoryEntry
     let isSelected: Bool
-    /// `copyOnly == false` → paste into previous app; `true` → just copy.
+    /// `copyOnly == false` -> paste into previous app; `true` -> just copy.
     let onActivate: (Bool) -> Void
     let onTogglePin: () -> Void
     let onDelete: () -> Void
 
     @State private var isHovered = false
+
+    private static func optionDown() -> Bool {
+        NSEvent.modifierFlags.contains(.option)
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -230,18 +228,20 @@ private struct HistoryRow: View {
                     .foregroundStyle(.tertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { onActivate(Self.optionDown()) }
 
             // Trailing actions appear on hover. Keep the gutter even when
             // unhovered so widths don't jitter.
             HStack(spacing: 6) {
                 if isHovered {
-                    Button { onDelete() } label: {
-                        Image(systemName: "trash")
+                    Button { onActivate(true) } label: {
+                        Image(systemName: "doc.on.doc")
                             .font(.system(size: 11))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
-                    .help("Delete")
+                    .help("Copy")
                 }
             }
             .frame(width: 20)

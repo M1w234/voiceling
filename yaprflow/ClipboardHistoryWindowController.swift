@@ -30,7 +30,7 @@ final class ClipboardHistoryWindowController: NSWindowController, NSWindowDelega
         panel.title = "yaprflow History"
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
-        panel.isMovableByWindowBackground = true
+        panel.isMovableByWindowBackground = false
         panel.hasShadow = true
         panel.isFloatingPanel = true
         panel.level = .floating
