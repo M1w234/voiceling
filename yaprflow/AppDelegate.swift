@@ -55,8 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         // Never leave the system muted behind us if we quit mid-recording.
         AudioDucking.shared.restore()
         // History saves are debounced 300 ms — flush so a dictation finished
-        // right before quit isn't lost.
+        // right before quit isn't lost. Same for an open comparison-capture
+        // window.
         ClipboardHistoryStore.shared.flushPendingSave()
+        ComparisonLogger.shared.flush()
     }
 
     private func registerHistoryHotkey() {
@@ -151,6 +153,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         )
         duckItem.toolTip = "Mute system audio output while recording so music or video doesn't bleed into the mic. Volume is restored when you stop (unless you changed it yourself mid-recording)."
         menu.addItem(duckItem)
+
+        let comparisonItem = NSMenuItem()
+        comparisonItem.view = ToggleMenuItemView(
+            symbolName: "square.split.2x1",
+            title: "Comparison Log",
+            publisher: AppState.shared.$comparisonLogMode.eraseToAnyPublisher(),
+            get: { AppState.shared.comparisonLogMode },
+            set: { AppState.shared.comparisonLogMode = $0 }
+        )
+        comparisonItem.toolTip = "Study tool: log each dictation (raw + polished) plus whatever a second dictation app copies to the clipboard, for side-by-side quality analysis. Writes to Application Support/yaprflow/comparison-log.jsonl."
+        menu.addItem(comparisonItem)
 
         let soundsItem = NSMenuItem(title: "Sound Effects", action: nil, keyEquivalent: "")
         soundsItem.image = NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: nil)

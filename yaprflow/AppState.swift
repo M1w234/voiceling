@@ -24,6 +24,7 @@ final class AppState: ObservableObject {
     private static let screenContextModeKey = "yaprflow.screenContextMode"
     private static let preserveClipboardModeKey = "yaprflow.preserveClipboardMode"
     private static let duckWhileRecordingKey = "yaprflow.duckWhileRecording"
+    private static let comparisonLogModeKey = "yaprflow.comparisonLogMode"
     private static let soundEffectsEnabledKey = "yaprflow.soundEffectsEnabled"
     private static let startSoundNameKey = "yaprflow.startSoundName"
     private static let stopSoundNameKey = "yaprflow.stopSoundName"
@@ -94,6 +95,16 @@ final class AppState: ObservableObject {
     @Published var duckWhileRecording: Bool {
         didSet {
             UserDefaults.standard.set(duckWhileRecording, forKey: Self.duckWhileRecordingKey)
+        }
+    }
+
+    /// When `true`, each finished dictation is appended to
+    /// comparison-log.jsonl along with whatever a concurrently-running
+    /// second dictation engine (Wispr Flow) puts on the clipboard — data
+    /// for side-by-side quality analysis. Off by default; study tool.
+    @Published var comparisonLogMode: Bool {
+        didSet {
+            UserDefaults.standard.set(comparisonLogMode, forKey: Self.comparisonLogModeKey)
         }
     }
 
@@ -172,6 +183,11 @@ final class AppState: ObservableObject {
             self.duckWhileRecording = stored
         } else {
             self.duckWhileRecording = false
+        }
+        if let stored = UserDefaults.standard.object(forKey: Self.comparisonLogModeKey) as? Bool {
+            self.comparisonLogMode = stored
+        } else {
+            self.comparisonLogMode = false
         }
         if let stored = UserDefaults.standard.object(forKey: Self.soundEffectsEnabledKey) as? Bool {
             self.soundEffectsEnabled = stored

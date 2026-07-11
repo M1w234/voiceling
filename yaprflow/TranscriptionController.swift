@@ -215,6 +215,7 @@ final class TranscriptionController {
         preserveClipboard: Bool,
         updateStatus: Bool = true
     ) {
+        ComparisonLogger.shared.recordDelivered(text)
         if autoPasteEnabled, preserveClipboard {
             if insertDirectly(text, targetPID: targetPID) {
                 if updateStatus { state.status = .inserted }
@@ -453,6 +454,10 @@ final class TranscriptionController {
 
         if !finalText.isEmpty {
             state.lastOriginalTranscript = finalText
+            // Comparison study (no-op unless the menu toggle is on): log our
+            // raw transcript and start watching the clipboard for the other
+            // engine's output.
+            ComparisonLogger.shared.beginCapture(raw: finalText)
 
             // Snapshot session-scoped values for any async work below — never
             // read `self.currentSessionID` / `self.sessionFrontmostPID` from
