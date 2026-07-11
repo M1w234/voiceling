@@ -49,6 +49,48 @@ enum SoundEffect {
         return canonicalSounds
     }
 
+    private nonisolated static let bundledExtensions: Set<String> = ["m4a", "aiff", "wav", "mp3"]
+
+    /// Directories that may hold app-bundled chimes. Xcode's synchronized
+    /// folder groups can copy `yaprflow/Sounds/*` either flat into Resources
+    /// or as a `Sounds/` folder reference depending on project settings —
+    /// scan both so a project-format change can't silently orphan the sounds.
+    private nonisolated static func bundledSoundDirs() -> [URL] {
+        guard let resources = Bundle.main.resourceURL else { return [] }
+        return [resources.appendingPathComponent("Sounds", isDirectory: true), resources]
+    }
+
+    /// Names of custom chimes shipped inside the app bundle (synthesized
+    /// Yapr set + imported ones). Shown as their own section in the picker.
+    nonisolated static func bundledSounds() -> [String] {
+        var names: Set<String> = []
+        for dir in bundledSoundDirs() {
+            guard let entries = try? FileManager.default.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: nil
+            ) else { continue }
+            for url in entries where bundledExtensions.contains(url.pathExtension.lowercased()) {
+                names.insert(url.deletingPathExtension().lastPathComponent)
+            }
+        }
+        return names.sorted()
+    }
+
+    private nonisolated static func bundledSoundURL(named name: String) -> URL? {
+        let fm = FileManager.default
+        for dir in bundledSoundDirs() {
+            for ext in bundledExtensions {
+                let url = dir.appendingPathComponent("\(name).\(ext)")
+                if fm.fileExists(atPath: url.path) { return url }
+            }
+        }
+        return nil
+    }
+
+    /// Strong reference to the currently-playing file-based sound. Unlike
+    /// `NSSound(named:)` (system-cached), a `contentsOf:` sound stops if its
+    /// last reference dies before playback finishes.
+    private static var activeSound: NSSound?
+
     private var systemSoundName: String {
         switch self {
         case .start: return AppState.shared.startSoundName
@@ -72,8 +114,15 @@ enum SoundEffect {
     }
 
     private static func playByName(_ name: String) {
+        // Bundled custom chimes win over same-named system sounds.
+        if let url = bundledSoundURL(named: name),
+           let sound = NSSound(contentsOf: url, byReference: true) {
+            activeSound = sound
+            sound.play()
+            return
+        }
         guard let sound = NSSound(named: NSSound.Name(name)) else {
-            log.error("System sound \(name, privacy: .public) not found")
+            log.error("Sound \(name, privacy: .public) not found (bundle or system)")
             return
         }
         sound.play()

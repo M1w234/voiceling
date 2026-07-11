@@ -356,13 +356,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let selector: Selector = forStart
             ? #selector(selectStartSound(_:))
             : #selector(selectStopSound(_:))
-        for name in SoundEffect.availableSounds() {
+
+        func addSound(_ name: String) {
             let item = NSMenuItem(title: name, action: selector, keyEquivalent: "")
             item.target = self
             item.representedObject = name
             item.state = (name == current) ? .on : .off
             menu.addItem(item)
         }
+
+        // Custom chimes bundled with the app (synthesized + imported) get
+        // their own section above the macOS system set.
+        let bundled = SoundEffect.bundledSounds()
+        if !bundled.isEmpty {
+            menu.addItem(NSMenuItem.sectionHeader(title: "Yaprflow"))
+            bundled.forEach(addSound)
+            menu.addItem(NSMenuItem.separator())
+            menu.addItem(NSMenuItem.sectionHeader(title: "macOS"))
+        }
+        SoundEffect.availableSounds().forEach(addSound)
         return menu
     }
 
