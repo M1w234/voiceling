@@ -63,14 +63,17 @@ final class NotchOverlayWindowController: NSWindowController, NSWindowDelegate {
             log.error("show(): window is nil")
             return
         }
-        // Skip the fade-in animation for now — if anything in the
-        // NSAnimationContext path is failing on this machine, we'd never
-        // become visible. Setting alphaValue directly is unambiguous.
-        window.alphaValue = 1
+        // Order front first (visibility never depends on the animation
+        // completing), then fade alpha in. Skipping the fade made the pill
+        // pop in harshly; 0.15s reads as smooth without feeling laggy.
         window.orderFrontRegardless()
-        let scr = window.screen?.localizedName ?? "<nil>"
-        let f = window.frame
-        log.info("show(): ordered front. frame=\(NSStringFromRect(f), privacy: .public) screen=\(scr, privacy: .public) alpha=\(window.alphaValue) visible=\(window.isVisible)")
+        if window.alphaValue < 1 {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.15
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                window.animator().alphaValue = 1
+            }
+        }
     }
 
     func hide() {

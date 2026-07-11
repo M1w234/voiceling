@@ -56,7 +56,7 @@ struct NotchOverlayView: View {
     private var leadingIndicator: some View {
         switch state.status {
         case .listening:
-            LevelBarsView(level: state.inputLevel, active: true)
+            WaveformView(level: state.inputLevel)
         case .preparing, .finishing:
             ProgressView()
                 .controlSize(.small)
@@ -121,41 +121,70 @@ struct NotchOverlayView: View {
     }
 }
 
-/// Three vertical bars whose heights track the live input level, with a tiny
-/// per-bar scale offset so the cluster feels alive rather than three identical
-/// pumps. Easing on the height keeps it from looking jittery on bursty buffers.
+/// Wispr-style scrolling waveform: a rolling history of the live input level
+/// rendered as vertically-centered capsules, newest sample on the right,
+/// scrolling left as new audio arrives. Because each bar keeps its value as
+/// it drifts left (instead of every bar re-animating to the newest level),
+/// the motion reads as a waveform of what you actually said rather than a
+/// choppy synchronized pump.
+private struct WaveformView: View {
+    let level: Float
+
+    private static let barCount = 26
+    private static let barWidth: CGFloat = 2.5
+    private static let barSpacing: CGFloat = 2
+    private static let baseHeight: CGFloat = 3
+    private static let maxHeight: CGFloat = 20
+
+    /// Rolling normalized-amplitude history, oldest first.
+    @State private var history: [Float] = Array(repeating: 0, count: barCount)
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Self.barSpacing) {
+            ForEach(0..<Self.barCount, id: \.self) { idx in
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(opacity(at: idx)))
+                    .frame(width: Self.barWidth, height: height(at: idx))
+            }
+        }
+        .frame(height: Self.maxHeight)
+        .onChange(of: level) { _, newLevel in
+            // Soft gain + gamma: speech RMS sits ~0.05–0.25 on a typical mic;
+            // the curve lets normal speech reach the upper range without
+            // shouting, while keeping silence visibly flat.
+            let amplified = min(1.0, newLevel * 3.5)
+            let shaped = pow(amplified, 0.65)
+            history.removeFirst()
+            history.append(shaped)
+        }
+        .animation(.linear(duration: 0.05), value: history)
+    }
+
+    private func height(at index: Int) -> CGFloat {
+        Self.baseHeight + CGFloat(history[index]) * (Self.maxHeight - Self.baseHeight)
+    }
+
+    /// Older samples fade toward the left edge so the trail dissolves
+    /// instead of ending in a hard cliff.
+    private func opacity(at index: Int) -> Double {
+        0.30 + 0.62 * (Double(index) / Double(Self.barCount - 1))
+    }
+}
+
+/// Static bars for the idle fallback state (the overlay is normally hidden
+/// when idle; this just keeps the layout from collapsing).
 private struct LevelBarsView: View {
     let level: Float
     let active: Bool
 
-    private static let baseHeight: CGFloat = 4
-    private static let maxHeight: CGFloat = 18
-    private static let barWidth: CGFloat = 3
-
-    // Per-bar gain — middle bar reads slightly higher so the silhouette
-    // feels like a sound wave rather than a fence.
-    private static let barScales: [Float] = [0.85, 1.15, 0.95]
-
     var body: some View {
         HStack(spacing: 3) {
-            ForEach(Self.barScales.indices, id: \.self) { idx in
-                bar(scale: Self.barScales[idx])
+            ForEach(0..<3, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(Color.white.opacity(0.92))
+                    .frame(width: 3, height: 4)
             }
         }
-    }
-
-    private func bar(scale: Float) -> some View {
-        // Apply a soft gain on top of the raw RMS — speech sits around
-        // 0.05–0.25 on a typical mic and we want the bars to reach the
-        // top of their range on confident speech, not require shouting.
-        let amplified = min(1.0, level * scale * 3.5)
-        let height: CGFloat = active
-            ? max(Self.baseHeight, CGFloat(amplified) * Self.maxHeight)
-            : Self.baseHeight
-        return RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-            .fill(Color.white.opacity(0.92))
-            .frame(width: Self.barWidth, height: height)
-            .animation(.easeOut(duration: 0.08), value: height)
     }
 }
 

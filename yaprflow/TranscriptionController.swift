@@ -368,7 +368,19 @@ final class TranscriptionController {
 
             // Session-scoped affordances — all torn down in stop()/cancel().
             if state.duckWhileRecording {
-                AudioDucking.shared.duck()
+                if state.soundEffectsEnabled {
+                    // Let the start chime land before muting output — ducking
+                    // immediately silences the very cue that says "mic is
+                    // live" (the sound plays on the device we're about to
+                    // mute). ~0.5s covers the short system chimes.
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(500))
+                        guard self.isActive, self.state.duckWhileRecording else { return }
+                        AudioDucking.shared.duck()
+                    }
+                } else {
+                    AudioDucking.shared.duck()
+                }
             }
             CancelHotkey.onPressed = {
                 Task { @MainActor in
