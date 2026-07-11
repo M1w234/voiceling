@@ -6,7 +6,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$ROOT/build/Build/Products/Release/yaprflow.app"
+APP="$ROOT/build.noindex/Build/Products/Release/yaprflow.app"
 DEST="/Applications/yaprflow.app"
 
 cd "$ROOT"
@@ -35,7 +35,7 @@ xcodebuild \
     -project yaprflow.xcodeproj \
     -scheme yaprflow \
     -configuration Release \
-    -derivedDataPath build \
+    -derivedDataPath build.noindex \
     CODE_SIGN_IDENTITY=- \
     CODE_SIGNING_REQUIRED=NO \
     CODE_SIGNING_ALLOWED=NO \

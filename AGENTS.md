@@ -7,7 +7,7 @@ Local-first macOS menubar dictation app. Cloned from [tmoreton/yaprflow](https:/
 | Thing | Where |
 |-------|-------|
 | Source | `~/yaprflow/` (this repo) |
-| Built app | `~/yaprflow/build/Build/Products/Release/yaprflow.app` |
+| Built app | `~/yaprflow/build.noindex/Build/Products/Release/yaprflow.app` |
 | Installed app | `/Applications/yaprflow.app` |
 | Bundle ID | `com.tmoreton.yaprflow` (unchanged from upstream) |
 | Saved hotkey config | `~/Library/Containers/com.tmoreton.yaprflow/Data/Library/Preferences/com.tmoreton.yaprflow.plist` |
@@ -27,10 +27,10 @@ Quits running yaprflow, builds Release with ad-hoc signing, replaces `/Applicati
 Manual equivalent:
 ```bash
 xcodebuild -project yaprflow.xcodeproj -scheme yaprflow -configuration Release \
-  -derivedDataPath build CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+  -derivedDataPath build.noindex CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 osascript -e 'tell application "yaprflow" to quit'
 rm -rf /Applications/yaprflow.app
-cp -R build/Build/Products/Release/yaprflow.app /Applications/
+cp -R build.noindex/Build/Products/Release/yaprflow.app /Applications/
 xattr -dr com.apple.quarantine /Applications/yaprflow.app
 open /Applications/yaprflow.app
 ```
@@ -92,4 +92,4 @@ If we revisit, do it as a separate `.modifierHold` and `.modifierDoubleTap` mode
 
 - Adding `NSAccessibilityUsageDescription` to Info.plist — that's a microphone-style usage string and isn't the right key for AX prompts (per Codex review).
 - Trying to keep the app sandboxed AND adopt `NSEvent` global monitors without TCC permission. Doesn't work.
-- Looking for a build cache shortcut — `xcodebuild` already caches SPM packages, MLX, etc. in `build/SourcePackages/`. Don't `git clean -fdx` that dir unless you want a fresh ~3 min build.
+- Looking for a build cache shortcut — `xcodebuild` already caches SPM packages, MLX, etc. in `build.noindex/SourcePackages/`. Don't `git clean -fdx` that dir unless you want a fresh ~3 min build.
