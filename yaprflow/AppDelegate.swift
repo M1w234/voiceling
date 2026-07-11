@@ -72,6 +72,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         ClipboardHistoryWindowController.shared.show()
     }
 
+    @objc private func openVocabulary() {
+        VocabularyStore.shared.openInEditor()
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
@@ -198,6 +202,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             action: #selector(showHistory)
         )
         menu.addItem(historyItem)
+
+        // Personal dictionary — opens vocabulary.json in the default editor.
+        // Edits are picked up automatically at the next dictation.
+        let vocabularyItem = NSMenuItem()
+        vocabularyItem.view = IconActionMenuItemView(
+            symbolName: "character.book.closed",
+            title: "Vocabulary…",
+            target: self,
+            action: #selector(openVocabulary)
+        )
+        vocabularyItem.toolTip = "Teach yaprflow your words. Each entry has a preferred spelling plus the phrases the transcriber keeps mis-hearing; matches are corrected automatically and the spellings are hinted to the grammar polish."
+        menu.addItem(vocabularyItem)
 
         menu.addItem(NSMenuItem.separator())
 

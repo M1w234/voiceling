@@ -33,6 +33,15 @@ struct NotchOverlayView: View {
         return false
     }
 
+    /// True for transient status strings (model loading/progress, grammar,
+    /// errors) as opposed to live transcript text.
+    private var isStatusMessage: Bool {
+        switch state.status {
+        case .preparing, .correcting, .summarizing, .error: return true
+        default: return false
+        }
+    }
+
     var body: some View {
         pill
             // Window is a fixed-size transparent canvas. Filling the
@@ -55,12 +64,24 @@ struct NotchOverlayView: View {
                 .frame(width: Self.indicatorSlotWidth, height: 22)
 
             if !displayText.isEmpty {
-                Text(displayText)
-                    .font(Self.transcriptFont)
-                    .foregroundStyle(.white)
-                    .multilineTextAlignment(.leading)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: true, vertical: true)
+                if isStatusMessage {
+                    // Status text (model loading, grammar progress) renders
+                    // small and single-line so the chip stays discreet — an
+                    // indicator, not a popup.
+                    Text(displayText)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 200)
+                } else {
+                    Text(displayText)
+                        .font(Self.transcriptFont)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: true, vertical: true)
+                }
             }
 
             // Finish — stop recording and transcribe. Same as releasing /
@@ -84,9 +105,10 @@ struct NotchOverlayView: View {
         )
         .fixedSize(horizontal: true, vertical: true)
         // Retraction: as the session resolves to idle (right before the
-        // window's alpha fade), the pill shrinks slightly — reads as a
-        // smooth retract instead of a hard vanish.
-        .scaleEffect(isIdle ? 0.86 : 1)
+        // window's alpha fade), the pill shrinks and pulls downward —
+        // reads as a smooth retract instead of a hard vanish.
+        .scaleEffect(isIdle ? 0.82 : 1)
+        .offset(y: isIdle ? 14 : 0)
         // Animate ALL state-driven layout changes (buttons entering/leaving,
         // indicator swaps, text growth) so nothing pops.
         .animation(.spring(response: 0.30, dampingFraction: 0.85), value: state.status)
@@ -156,9 +178,9 @@ struct NotchOverlayView: View {
         case .correcting(let message):    return message
         case .summarizing:                return "Summarizing…"
         case .copied, .inserted:
-            // The green check is the signal; keep the final text in place so
-            // the pill doesn't jump sizes at the moment of completion.
-            return state.liveTranscript.isEmpty ? "Copied" : Self.wrappedTail(of: state.liveTranscript)
+            // No completion ceremony — the pill retracts immediately, so
+            // showing the full text (or a label) here is dead weight.
+            return ""
         case .error(let message):         return message
         }
     }

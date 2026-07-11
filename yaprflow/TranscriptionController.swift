@@ -319,6 +319,9 @@ final class TranscriptionController {
         // doesn't corrupt the pipeline.
         sessionIsStreaming = state.streamingMode
 
+        // Pick up any hand edits to vocabulary.json (cheap mtime check).
+        VocabularyStore.shared.reloadIfChanged()
+
         // Per-session capture for auto-paste. Done BEFORE any await: by the
         // time ensureLoaded() returns (up to 30s on cold launch) frontmost may
         // have drifted, but we want "the app the user was in when they fired
@@ -440,7 +443,12 @@ final class TranscriptionController {
             }
         }
 
-        let finalText = confirmedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Vocabulary pass: swap known ASR mis-hearings for the user's
+        // preferred spellings ("yapper flow" → "yaprflow") before delivery
+        // AND before the grammar polish sees the text.
+        let finalText = VocabularyStore.shared.applyReplacements(
+            to: confirmedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
         state.liveTranscript = finalText
 
         if !finalText.isEmpty {
@@ -513,7 +521,9 @@ final class TranscriptionController {
                             autoPasteEnabled: autoPasteEnabled,
                             preserveClipboard: preserveClipboard
                         )
-                        self.scheduleAutoHide(after: 2.5)
+                        // Deliver → retract. No completion ceremony; the pill
+                        // pulls away as soon as the text has landed.
+                        self.scheduleAutoHide(after: 0.3)
                     } catch {
                         log.error("Grammar correction failed: \(error.localizedDescription)")
                         guard sessionID == self.currentSessionID else { return }
@@ -549,7 +559,8 @@ final class TranscriptionController {
                     autoPasteEnabled: autoPasteEnabled,
                     preserveClipboard: preserveClipboard
                 )
-                scheduleAutoHide(after: 1.2)
+                // Deliver → retract, no lingering.
+                scheduleAutoHide(after: 0.3)
             }
         } else {
             state.status = .idle
