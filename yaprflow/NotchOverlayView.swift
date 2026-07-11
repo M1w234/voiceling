@@ -13,7 +13,6 @@ struct NotchOverlayView: View {
     @ObservedObject var state: AppState
 
     private static let transcriptFont = Font.system(size: 13, weight: .medium)
-    private static let cornerRadius: CGFloat = 15
     private static let maxCharsPerLine = 56
 
     /// Width of the indicator slot — matches the waveform's natural width so
@@ -51,7 +50,7 @@ struct NotchOverlayView: View {
     }
 
     private var pill: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 8) {
             // Cancel — discard the dictation. Mirrors the Esc hotkey.
             if isListening {
                 controlButton(symbol: "xmark", help: "Cancel (esc)") {
@@ -85,22 +84,25 @@ struct NotchOverlayView: View {
             }
 
             // Finish — stop recording and transcribe. Same as releasing /
-            // tapping the hotkey; also balances the pill.
+            // tapping the hotkey. Prominent (filled) like Wispr's: the
+            // affirmative action reads brighter than cancel.
             if isListening {
-                controlButton(symbol: "checkmark", help: "Done") {
+                controlButton(symbol: "checkmark", help: "Done", prominent: true) {
                     TranscriptionController.shared.setActive(false)
                 }
                 .transition(.scale.combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 6)
+        // While listening the button circles nest into the capsule's rounded
+        // ends (Wispr-style caps); other states need a normal text inset.
+        .padding(.horizontal, isListening ? 5 : 14)
+        .padding(.vertical, 5)
         .background(
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+            Capsule(style: .continuous)
                 .fill(Color.black.opacity(0.92))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
+            Capsule(style: .continuous)
                 .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
         )
         .fixedSize(horizontal: true, vertical: true)
@@ -119,14 +121,17 @@ struct NotchOverlayView: View {
     private func controlButton(
         symbol: String,
         help: String,
+        prominent: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.white.opacity(0.92))
-                .frame(width: 19, height: 19)
-                .background(Circle().fill(Color.white.opacity(0.14)))
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(prominent ? Color.black.opacity(0.85) : Color.white.opacity(0.9))
+                .frame(width: 26, height: 26)
+                .background(
+                    Circle().fill(prominent ? Color.white.opacity(0.95) : Color.white.opacity(0.12))
+                )
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

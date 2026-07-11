@@ -18,7 +18,7 @@ final class NotchOverlayWindowController: NSWindowController, NSWindowDelegate {
     /// Distance from the bottom of the visible screen frame to the bottom of
     /// the overlay pill. visibleFrame already excludes the Dock, so this can
     /// sit low without colliding with it.
-    private static let bottomMargin: CGFloat = 22
+    private static let bottomMargin: CGFloat = 12
 
     private var mouseModeCancellable: AnyCancellable?
 
