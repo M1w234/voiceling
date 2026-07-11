@@ -65,7 +65,7 @@ struct NotchOverlayView: View {
             ProgressView()
                 .controlSize(.small)
                 .tint(.white)
-        case .copied:
+        case .copied, .inserted:
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
                 .font(.system(size: 16, weight: .semibold))
@@ -92,6 +92,7 @@ struct NotchOverlayView: View {
         case .correcting(let message):    return message
         case .summarizing:                return "Summarizing…"
         case .copied:                     return "Copied"
+        case .inserted:                   return "Inserted"
         case .error(let message):         return message
         }
     }

@@ -1,28 +1,58 @@
 import Carbon.HIToolbox
 import Foundation
 
+enum HotkeyMode: String, Codable {
+    case tapToToggle
+    case holdToTalk
+}
+
 struct HotkeyConfig: Codable, Equatable {
+    /// Sentinel value used in `keyCode` to indicate a modifier-only binding
+    /// (e.g. ⌘⇧ alone, no key). Modifier-only bindings can't go through
+    /// Carbon's `RegisterEventHotKey` — they're handled by `ModifierOnlyHotkey`.
+    static let modifierOnlyKeyCode: UInt32 = 0
+
     var keyCode: UInt32
     var modifiers: UInt32
+    var mode: HotkeyMode
 
-    init(keyCode: UInt32, modifiers: UInt32) {
+    init(keyCode: UInt32, modifiers: UInt32, mode: HotkeyMode = .tapToToggle) {
         self.keyCode = keyCode
         self.modifiers = modifiers
+        self.mode = mode
+    }
+
+    var isModifierOnly: Bool {
+        keyCode == Self.modifierOnlyKeyCode
+    }
+
+    /// A modifier-only binding needs a chord of at least two modifiers.
+    /// Zero would fire on every flagsChanged transition; a single modifier
+    /// (bare ⌘ or ⇧) collides with normal typing — holding ⌘ for 200 ms
+    /// while thinking about a shortcut would start dictation. Each Carbon
+    /// modifier flag is one bit, so the bit count is the modifier count.
+    var isValid: Bool {
+        if isModifierOnly { return modifiers.nonzeroBitCount >= 2 }
+        return true
     }
 
     static let defaultHotkey = HotkeyConfig(
         keyCode: UInt32(kVK_ANSI_T),
-        modifiers: UInt32(cmdKey)
+        modifiers: UInt32(cmdKey),
+        mode: .tapToToggle
     )
 
     private static let defaultsKey = "yaprflow.hotkey.v1"
 
-    // Only `keyCode` and `modifiers` are coded. Older builds also persisted
-    // a `mode` field (`tapToToggle` / `holdToTalk` / `doubleTapToLock`) —
-    // by omitting it from CodingKeys the decoder silently ignores those
-    // values, so a downgrade-and-upgrade round-trip doesn't break load().
     private enum CodingKeys: String, CodingKey {
-        case keyCode, modifiers
+        case keyCode, modifiers, mode
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.keyCode = try c.decode(UInt32.self, forKey: .keyCode)
+        self.modifiers = try c.decode(UInt32.self, forKey: .modifiers)
+        self.mode = try c.decodeIfPresent(HotkeyMode.self, forKey: .mode) ?? .tapToToggle
     }
 
     func save() {
@@ -41,7 +71,10 @@ struct HotkeyConfig: Codable, Equatable {
         if modifiers & UInt32(optionKey) != 0  { s += "⌥" }
         if modifiers & UInt32(shiftKey) != 0   { s += "⇧" }
         if modifiers & UInt32(cmdKey) != 0     { s += "⌘" }
-        s += Self.name(for: keyCode)
+        if !isModifierOnly { s += Self.name(for: keyCode) }
+        // Modifier-only bindings always support both hold and double-tap-to-lock
+        // simultaneously, so the per-mode "(hold)" suffix doesn't apply.
+        if !isModifierOnly && mode == .holdToTalk { s += "  (hold)" }
         return s
     }
 

@@ -65,6 +65,19 @@ nonisolated enum ScreenContextCapture {
         "com.apple.Passwords",
         "com.apple.keychainaccess",
         "com.apple.systempreferences",
+        // Third-party messengers and mail — same "private conversations"
+        // posture as Apple Mail/Messages above. Electron apps DO expose
+        // readable AX text fields, so these are real exposure without the
+        // denylist entry.
+        "org.whispersystems.signal-desktop",
+        "com.tinyspeck.slackmacgap",
+        "com.hnc.Discord",
+        "ru.keepcoder.Telegram",
+        "com.tdesktop.Telegram",
+        "net.whatsapp.WhatsApp",
+        "com.facebook.archon",               // Messenger
+        "com.microsoft.Outlook",
+        "com.microsoft.teams2",
         // Browsers — see comment above.
         "com.apple.Safari",
         "com.apple.SafariTechnologyPreview",

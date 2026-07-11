@@ -9,6 +9,8 @@ enum TranscriptionStatus: Equatable {
     case correcting(String)
     case summarizing  // New: on-demand summary in progress
     case copied
+    /// Delivered via clipboard-free direct insertion (Preserve Clipboard on).
+    case inserted
     case error(String)
 }
 
@@ -20,7 +22,11 @@ final class AppState: ObservableObject {
     private static let grammarModeKey = "yaprflow.grammarMode"
     private static let autoPasteModeKey = "yaprflow.autoPasteMode"
     private static let screenContextModeKey = "yaprflow.screenContextMode"
+    private static let preserveClipboardModeKey = "yaprflow.preserveClipboardMode"
+    private static let duckWhileRecordingKey = "yaprflow.duckWhileRecording"
     private static let soundEffectsEnabledKey = "yaprflow.soundEffectsEnabled"
+    private static let startSoundNameKey = "yaprflow.startSoundName"
+    private static let stopSoundNameKey = "yaprflow.stopSoundName"
     private static let lastTranscriptKey = "yaprflow.lastTranscript"
 
     @Published var status: TranscriptionStatus = .idle
@@ -71,12 +77,50 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// When `true`, play a short system sound on recording start (Pop) and
-    /// stop (Tink). Defaults to on — chimes are a small but useful signal that
-    /// the mic is actually live, especially on flaky hotkeys.
+    /// When `true` (and Auto-Paste is on), deliver transcripts by direct
+    /// insertion — AX selected-text write, falling back to synthetic Unicode
+    /// typing — instead of clipboard + ⌘V, leaving whatever the user had
+    /// copied untouched. Falls back to the clipboard when neither insertion
+    /// mechanism works so the transcript is never lost.
+    @Published var preserveClipboardMode: Bool {
+        didSet {
+            UserDefaults.standard.set(preserveClipboardMode, forKey: Self.preserveClipboardModeKey)
+        }
+    }
+
+    /// When `true`, mute system audio output for the duration of a recording
+    /// session (Wispr-style ducking) and restore it afterwards. Toggling it
+    /// mid-recording applies immediately (wired in the menu item).
+    @Published var duckWhileRecording: Bool {
+        didSet {
+            UserDefaults.standard.set(duckWhileRecording, forKey: Self.duckWhileRecordingKey)
+        }
+    }
+
+    /// When `true`, play a short system sound on recording start and stop.
+    /// Defaults to on — chimes are a small but useful signal that the mic is
+    /// actually live, especially on flaky hotkeys. The specific sounds are
+    /// picked via `startSoundName` / `stopSoundName`.
     @Published var soundEffectsEnabled: Bool {
         didSet {
             UserDefaults.standard.set(soundEffectsEnabled, forKey: Self.soundEffectsEnabledKey)
+        }
+    }
+
+    /// Name of the macOS system sound played at recording start. Resolved by
+    /// `NSSound(named:)`, so values must match a basename in
+    /// `/System/Library/Sounds/` (without the .aiff extension).
+    @Published var startSoundName: String {
+        didSet {
+            UserDefaults.standard.set(startSoundName, forKey: Self.startSoundNameKey)
+        }
+    }
+
+    /// Name of the macOS system sound played at recording stop. See
+    /// `startSoundName` for resolution semantics.
+    @Published var stopSoundName: String {
+        didSet {
+            UserDefaults.standard.set(stopSoundName, forKey: Self.stopSoundNameKey)
         }
     }
 
@@ -119,11 +163,25 @@ final class AppState: ObservableObject {
         } else {
             self.screenContextMode = false
         }
+        if let stored = UserDefaults.standard.object(forKey: Self.preserveClipboardModeKey) as? Bool {
+            self.preserveClipboardMode = stored
+        } else {
+            self.preserveClipboardMode = false
+        }
+        if let stored = UserDefaults.standard.object(forKey: Self.duckWhileRecordingKey) as? Bool {
+            self.duckWhileRecording = stored
+        } else {
+            self.duckWhileRecording = false
+        }
         if let stored = UserDefaults.standard.object(forKey: Self.soundEffectsEnabledKey) as? Bool {
             self.soundEffectsEnabled = stored
         } else {
             self.soundEffectsEnabled = true
         }
+        self.startSoundName = UserDefaults.standard.string(forKey: Self.startSoundNameKey)
+            ?? SoundEffect.defaultStartName
+        self.stopSoundName = UserDefaults.standard.string(forKey: Self.stopSoundNameKey)
+            ?? SoundEffect.defaultStopName
         self.lastTranscript = UserDefaults.standard.string(forKey: Self.lastTranscriptKey) ?? ""
     }
 }

@@ -418,7 +418,9 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
         let hosting = NSHostingController(rootView: rootView)
         let newWindow = NSWindow(contentViewController: hosting)
-        newWindow.setContentSize(NSSize(width: 480, height: 520))
+        // Must match OnboardingView's fixed frame (520×520) — a narrower
+        // window clips the mode-selection cards at both edges.
+        newWindow.setContentSize(NSSize(width: 520, height: 520))
         newWindow.styleMask = [.titled, .closable, .fullSizeContentView]
         newWindow.titlebarAppearsTransparent = true
         newWindow.titleVisibility = .hidden

@@ -42,12 +42,30 @@ final class TranscriptionController {
 
     private var isActive = false
     private var isStarting = false
+    /// In-flight stop() work. start() awaits this before resetting session
+    /// state — without it, pressing the hotkey again while stop() is still
+    /// awaiting the transcribe chain lets start() wipe `confirmedText` mid-
+    /// stop and the previous dictation is silently lost.
+    private var stopTask: Task<Void, Never>?
+    /// Reentrancy guard for feed()'s VAD drain loop. feed() suspends at
+    /// `processStreamingChunk`, and the MainActor is free to interleave
+    /// another feed() at that point — two drains running against the same
+    /// `vadState` process chunks out of order and corrupt speech detection.
+    /// Samples still accumulate in `vadPending` while the guard is held, so
+    /// a skipped drain is lossless; the next feed() picks them up.
+    private var isDrainingVAD = false
     /// What the caller most recently asked for. Diverges from isActive while
     /// start() is awaiting mic/model load — if the user releases push-to-talk
     /// during that window, start() will see desiredActive == false and bail.
     private var desiredActive = false
     private var sessionIsStreaming = true
     private var autoHideTask: Task<Void, Never>?
+    /// Safety ceiling on a single recording session. Mostly protects lock
+    /// mode (double-tap) — an accidental lock would otherwise leave the mic
+    /// hot and session buffers growing (~230 MB/hour) until noticed. Hitting
+    /// the ceiling stops-and-transcribes; nothing is discarded.
+    private let maxSessionDuration: TimeInterval = 10 * 60
+    private var maxDurationTask: Task<Void, Never>?
 
     /// Monotonic per-recording session ID. Bumped in start() before any await.
     /// Async work (notably the grammar correction Task that outlives stop())
@@ -83,6 +101,13 @@ final class TranscriptionController {
     // Less frequent = fewer re-transcriptions for long recordings.
     private let speculativeIntervalSamples = Int(2.0 * 16000)
     private let speculativeMinSpeechSamples = Int(1.0 * 16000)
+    /// Cap on how much audio each speculative pass re-transcribes. Without
+    /// it, a continuous monologue re-transcribes the ENTIRE in-progress
+    /// segment (up to 60s) every 2s, and the serialized transcribe chain
+    /// falls further behind the longer you talk. The overlay only shows the
+    /// last two lines anyway; the confirmed pass still covers the full
+    /// segment on speechEnd.
+    private let speculativeMaxWindowSamples = Int(15.0 * 16000)
 
     private init() {
         let bufferHandler: @Sendable (AVAudioPCMBuffer) -> Void = { buffer in
@@ -91,10 +116,54 @@ final class TranscriptionController {
             }
         }
         self.capture = AudioCapture(bufferHandler: bufferHandler)
+        // Default input device changed / sample rate changed mid-recording:
+        // the engine has already stopped feeding us. End the session
+        // gracefully (transcribing what we have) instead of leaving a dead
+        // mic behind a "Listening…" overlay.
+        self.capture.onConfigurationChange = {
+            Task { @MainActor in
+                let controller = TranscriptionController.shared
+                guard controller.isActive else { return }
+                log.info("Audio engine configuration changed mid-session — finishing dictation")
+                controller.setActive(false)
+            }
+        }
     }
+
+    var isRecording: Bool { isActive }
 
     func toggle() {
         setActive(!desiredActive)
+    }
+
+    /// Discard the current session entirely: stop the mic, throw away the
+    /// audio and any partial transcript, touch neither clipboard nor target
+    /// app. Bound to Esc while recording.
+    func cancel() {
+        guard isActive else { return }
+        desiredActive = false
+        isActive = false
+        maxDurationTask?.cancel()
+        CancelHotkey.shared.unregister()
+        capture.stop()
+        AudioDucking.shared.restore()
+        ModifierOnlyHotkey.shared.notifyRecordingEndedExternally()
+        SoundEffect.stop.play()
+
+        // Invalidate in-flight async work: chained transcribes check this
+        // session ID before touching confirmedText, and any grammar Task
+        // from a previous session already guards on it.
+        currentSessionID = UUID()
+        sessionSamples.removeAll()
+        vadPending.removeAll()
+        currentSpeechStart = nil
+        confirmedText = ""
+        volatileText = ""
+        state.inputLevel = 0
+        state.liveTranscript = ""
+        state.status = .idle
+        scheduleAutoHide(after: 0.4)
+        log.info("Dictation cancelled — session discarded")
     }
 
     /// Reads the frontmost-app PID with yaprflow itself filtered out — when we
@@ -134,6 +203,57 @@ final class TranscriptionController {
         AutoPaste.sendCmdV()
     }
 
+    /// Final delivery of a transcript to the user. Preserve-clipboard mode
+    /// (with auto-paste on) tries direct insertion first and only touches
+    /// the clipboard as a last resort; otherwise classic clipboard write +
+    /// optional ⌘V. `updateStatus: false` keeps a caller-set status (e.g.
+    /// the grammar-failure error) visible instead of overwriting it.
+    private func deliverTranscript(
+        _ text: String,
+        targetPID: pid_t?,
+        autoPasteEnabled: Bool,
+        preserveClipboard: Bool,
+        updateStatus: Bool = true
+    ) {
+        if autoPasteEnabled, preserveClipboard {
+            if insertDirectly(text, targetPID: targetPID) {
+                if updateStatus { state.status = .inserted }
+                return
+            }
+            log.info("Preserve-clipboard insertion unavailable — falling back to clipboard")
+        }
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        let writeOK = pb.setString(text, forType: .string)
+        if updateStatus { state.status = .copied }
+        if writeOK {
+            performAutoPasteIfAllowed(targetPID: targetPID, enabled: autoPasteEnabled)
+        }
+    }
+
+    /// Same guard set as auto-paste, then TextInsertion (AX selected-text
+    /// write → synthetic Unicode typing). False when any guard or both
+    /// mechanisms fail.
+    private func insertDirectly(_ text: String, targetPID: pid_t?) -> Bool {
+        guard let target = targetPID else {
+            log.info("Insertion skipped: no captured target")
+            return false
+        }
+        guard AutoPaste.hasAccessibility else {
+            log.info("Insertion skipped: Accessibility permission not granted")
+            return false
+        }
+        guard !AutoPaste.isSecureInputEnabled else {
+            log.info("Insertion skipped: secure event input is enabled")
+            return false
+        }
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == target else {
+            log.info("Insertion skipped: focus changed since recording started")
+            return false
+        }
+        return TextInsertion.insert(text, intoPID: target)
+    }
+
     /// Drive recording from desired state. Safe to call rapidly from push-to-talk:
     /// if the user presses-and-releases during start()'s async warmup, start()
     /// observes desiredActive == false post-await and bails out cleanly.
@@ -141,11 +261,28 @@ final class TranscriptionController {
         desiredActive = active
         Task { @MainActor in
             if active {
+                // Serialize behind any in-flight stop(): it is still reading
+                // session state (confirmedText, sessionSamples) across its
+                // awaits, and start() resets all of it.
+                if let pending = stopTask {
+                    await pending.value
+                }
+                // Re-check: the user may have released again while we waited.
+                guard desiredActive else { return }
                 if !isActive, !isStarting { await start() }
             } else {
                 // If start() is still in-flight, it will see desiredActive=false
                 // post-await and bail. Otherwise stop normally.
-                if isActive { await stop() }
+                if isActive, stopTask == nil {
+                    let task = Task { @MainActor in
+                        await self.stop()
+                    }
+                    stopTask = task
+                    await task.value
+                    // Only one stop can be in flight (guarded above), so this
+                    // is necessarily our own task being cleared.
+                    stopTask = nil
+                }
             }
         }
     }
@@ -228,6 +365,28 @@ final class TranscriptionController {
             try capture.start()
             isActive = true
             SoundEffect.start.play()
+
+            // Session-scoped affordances — all torn down in stop()/cancel().
+            if state.duckWhileRecording {
+                AudioDucking.shared.duck()
+            }
+            CancelHotkey.onPressed = {
+                Task { @MainActor in
+                    TranscriptionController.shared.cancel()
+                }
+            }
+            CancelHotkey.shared.register()
+            maxDurationTask?.cancel()
+            maxDurationTask = Task { @MainActor in
+                do {
+                    try await Task.sleep(for: .seconds(maxSessionDuration))
+                } catch {
+                    return
+                }
+                guard self.isActive else { return }
+                log.info("Max session duration reached — auto-stopping")
+                self.setActive(false)
+            }
         } catch {
             log.error("Start failed: \(error.localizedDescription)")
             state.status = .error(error.localizedDescription)
@@ -238,7 +397,15 @@ final class TranscriptionController {
     private func stop() async {
         guard isActive else { return }
         isActive = false
+        maxDurationTask?.cancel()
+        CancelHotkey.shared.unregister()
         capture.stop()
+        AudioDucking.shared.restore()
+        // No-op for chord-initiated stops (the recognizer already reset
+        // itself before firing onStop); resyncs it after max-duration or
+        // device-change stops so the next tap isn't consumed as a stale
+        // lock-mode "stop".
+        ModifierOnlyHotkey.shared.notifyRecordingEndedExternally()
         SoundEffect.stop.play()
         state.inputLevel = 0
         state.status = .finishing
@@ -257,7 +424,7 @@ final class TranscriptionController {
             // has been showing "Listening…" / "Processing…" the whole time; the
             // final text will land below.
             if !sessionSamples.isEmpty {
-                await performTranscribe(samples: sessionSamples)
+                await performTranscribe(samples: sessionSamples, sessionID: currentSessionID)
             }
         }
 
@@ -266,8 +433,6 @@ final class TranscriptionController {
 
         if !finalText.isEmpty {
             state.lastOriginalTranscript = finalText
-            let pb = NSPasteboard.general
-            pb.clearContents()
 
             // Snapshot session-scoped values for any async work below — never
             // read `self.currentSessionID` / `self.sessionFrontmostPID` from
@@ -277,14 +442,21 @@ final class TranscriptionController {
             let targetPID = sessionFrontmostPID
             let autoPasteEnabled = state.autoPasteMode
             let screenContextEnabled = state.screenContextMode
+            let preserveClipboard = state.preserveClipboardMode
 
             if state.grammarMode {
-                // Grammar mode: copy original first, then corrected overwrites
-                // it. The original write is NOT auto-pasted — auto-paste only
-                // fires on the final value the user expects to land in their
-                // text field (corrected on success, or original on failure
-                // below).
-                pb.setString(finalText, forType: .string)
+                // Grammar mode: put the original on the clipboard first so
+                // the user has SOMETHING while correction runs; the final
+                // delivery below overwrites it. Skipped in preserve-clipboard
+                // mode, whose whole point is not touching the clipboard. The
+                // original write is never auto-pasted — auto-paste/insertion
+                // only fires on the final value (corrected on success, or
+                // original on failure below).
+                if !(autoPasteEnabled && preserveClipboard) {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString(finalText, forType: .string)
+                }
 
                 state.status = .correcting("Improving grammar…")
                 autoHideTask?.cancel()
@@ -297,11 +469,12 @@ final class TranscriptionController {
                         // the user may have ⌘Tab'd away during recording, in
                         // which case the captured snapshot is irrelevant.
                         var contextForPolish: ScreenContext? = nil
-                        if screenContextEnabled,
-                           let target = targetPID,
-                           NSWorkspace.shared.frontmostApplication?.processIdentifier == target {
+                        let frontmostNow = NSWorkspace.shared.frontmostApplication?.processIdentifier
+                        let pidMatches = (frontmostNow == targetPID)
+                        if screenContextEnabled, let _ = targetPID, pidMatches {
                             contextForPolish = self.screenContextStore.contextIfReady(for: sessionID)
                         }
+                        log.info("Polish context decision: enabled=\(screenContextEnabled, privacy: .public) pidMatch=\(pidMatches, privacy: .public) gotContext=\(contextForPolish != nil, privacy: .public)")
 
                         let corrected = try await GrammarController.shared.correct(
                             text: finalText,
@@ -320,55 +493,51 @@ final class TranscriptionController {
                             log.info("Dropping stale grammar correction (newer session in flight)")
                             return
                         }
-                        let writeOK = pb.setString(corrected, forType: .string)
-
                         self.state.liveTranscript = corrected
                         self.state.lastTranscript = corrected
-                        self.state.status = .copied
+                        self.deliverTranscript(
+                            corrected,
+                            targetPID: targetPID,
+                            autoPasteEnabled: autoPasteEnabled,
+                            preserveClipboard: preserveClipboard
+                        )
                         self.scheduleAutoHide(after: 2.5)
-
-                        if writeOK {
-                            self.performAutoPasteIfAllowed(
-                                targetPID: targetPID,
-                                enabled: autoPasteEnabled
-                            )
-                        }
                     } catch {
                         log.error("Grammar correction failed: \(error.localizedDescription)")
                         guard sessionID == self.currentSessionID else { return }
-                        // Original is already on the clipboard. Surface the
-                        // failure briefly so the user notices grammar didn't
-                        // run — most often this is a fresh install where the
-                        // model download failed (network, 404 release tag,
-                        // etc.) and silent fallback would let it go undetected
-                        // forever.
+                        // Surface the failure briefly so the user notices
+                        // grammar didn't run — most often this is a fresh
+                        // install where the model download failed (network,
+                        // 404 release tag, etc.) and silent fallback would
+                        // let it go undetected forever.
                         self.state.lastTranscript = finalText
-                        self.state.status = .error("Grammar unavailable — copied original")
+                        self.state.status = .error("Grammar unavailable — used original")
                         self.scheduleAutoHide(after: 3.0)
 
-                        // Auto-paste the original anyway — the user invoked
-                        // dictation expecting text to appear in their field,
-                        // and silently disabling the feature on grammar
-                        // failure is worse than pasting uncorrected text.
-                        self.performAutoPasteIfAllowed(
+                        // Deliver the original anyway — the user invoked
+                        // dictation expecting text to appear, and silently
+                        // dropping it on grammar failure is worse than
+                        // delivering uncorrected text. updateStatus false so
+                        // the error above stays visible.
+                        self.deliverTranscript(
+                            finalText,
                             targetPID: targetPID,
-                            enabled: autoPasteEnabled
+                            autoPasteEnabled: autoPasteEnabled,
+                            preserveClipboard: preserveClipboard,
+                            updateStatus: false
                         )
                     }
                 }
             } else {
-                // Regular mode: just copy the transcript
-                let writeOK = pb.setString(finalText, forType: .string)
+                // Regular mode: deliver directly.
                 state.lastTranscript = finalText
-                state.status = .copied
+                deliverTranscript(
+                    finalText,
+                    targetPID: targetPID,
+                    autoPasteEnabled: autoPasteEnabled,
+                    preserveClipboard: preserveClipboard
+                )
                 scheduleAutoHide(after: 1.2)
-
-                if writeOK {
-                    performAutoPasteIfAllowed(
-                        targetPID: targetPID,
-                        enabled: autoPasteEnabled
-                    )
-                }
             }
         } else {
             state.status = .idle
@@ -397,8 +566,14 @@ final class TranscriptionController {
         // Single-shot mode: just accumulate, transcribe everything in stop().
         guard sessionIsStreaming else { return }
 
-        guard let vad = vadManager, var currentVadState = vadState else { return }
+        guard let vad = vadManager else { return }
         vadPending.append(contentsOf: samples)
+
+        // Only one drain loop at a time — see `isDrainingVAD`. Our samples are
+        // already in vadPending; the in-flight drain will process them.
+        guard !isDrainingVAD, var currentVadState = vadState else { return }
+        isDrainingVAD = true
+        defer { isDrainingVAD = false }
 
         while vadPending.count >= VadManager.chunkSize {
             let chunk = Array(vadPending.prefix(VadManager.chunkSize))
@@ -415,6 +590,10 @@ final class TranscriptionController {
                 log.error("VAD failed: \(error.localizedDescription)")
                 return
             }
+            // stop() may have run during the await — it already flushed the
+            // in-progress segment as the session tail, so acting on this
+            // (stale) VAD result would double-transcribe it.
+            guard isActive else { return }
             currentVadState = result.state
             vadState = currentVadState
 
@@ -447,26 +626,33 @@ final class TranscriptionController {
         guard total - start >= speculativeMinSpeechSamples else { return }
 
         lastSpeculativeSampleCount = total
-        let segment = Array(sessionSamples[start..<total])
-        let segmentStart = start
-        enqueueSpeculative(samples: segment, segmentStart: segmentStart)
+        // Cap the preview window — see `speculativeMaxWindowSamples`. The
+        // guard identity stays `start` (the segment's true beginning) so
+        // performSpeculative's relevance check still works.
+        let windowStart = max(start, total - speculativeMaxWindowSamples)
+        let segment = Array(sessionSamples[windowStart..<total])
+        enqueueSpeculative(samples: segment, segmentStart: start)
     }
 
     /// Transcribe segments in the order they arrive by chaining Tasks.
     private func enqueueTranscribe(samples: [Float]) {
         let previous = transcribeChain
+        let sessionID = currentSessionID
         transcribeChain = Task { [weak self] in
             await previous?.value
-            await self?.performTranscribe(samples: samples)
+            await self?.performTranscribe(samples: samples, sessionID: sessionID)
         }
     }
 
-    private func performTranscribe(samples: [Float]) async {
+    private func performTranscribe(samples: [Float], sessionID: UUID) async {
         guard let asr = asrManager else { return }
         do {
             let result = try await asr.transcribe(samples, source: .microphone)
             let cleaned = Self.cleanTranscript(result.text)
             await MainActor.run {
+                // cancel() bumps the session ID; a chained transcribe from a
+                // discarded session must not resurrect its text.
+                guard sessionID == self.currentSessionID else { return }
                 if !cleaned.isEmpty {
                     if self.confirmedText.isEmpty {
                         self.confirmedText = cleaned
@@ -543,12 +729,16 @@ final class TranscriptionController {
         return 0
     }
 
-    /// Regex matching filler words ("uh", "um", "er", "ah", "hmm", "mm"
-    /// and obvious repetitions like "uhhh") as standalone words — not
-    /// substrings — so we don't eat real tokens like "umbrella" or "ermine".
-    /// Optional trailing comma or period gets swallowed with the filler.
+    /// Regex matching filler words ("uh", "um", "hmm", "mhm" and obvious
+    /// repetitions like "uhhh") as standalone words — not substrings — so we
+    /// don't eat real tokens like "umbrella". The er/ah/mm families were
+    /// removed: `e+r+` matched the real word "err", `a+h+` matched the
+    /// interjection "ah" people dictate on purpose, and `mm+` matched the
+    /// unit ("5 mm bolt"). uh/um cover the overwhelming majority of what the
+    /// ASR actually emits. Optional trailing comma or period gets swallowed
+    /// with the filler.
     private static let fillerWordRegex: NSRegularExpression = {
-        let pattern = #"(?i)\b(?:u+h+m*|u+m+h*|e+r+h*|a+h+m*|hmm+|mm+|mhm+)\b[,\.]?\s*"#
+        let pattern = #"(?i)\b(?:u+h+m*|u+m+h*|hmm+|mhm+)\b[,\.]?\s*"#
         return try! NSRegularExpression(pattern: pattern)
     }()
 

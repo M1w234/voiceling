@@ -30,13 +30,15 @@ final class ScreenContextStore {
 
         // Cheap MainActor-only pre-checks before paying the queue hop.
         guard AutoPaste.hasAccessibility else {
-            log.debug("Screen context skipped: Accessibility not granted")
+            log.info("Screen context skipped: Accessibility not granted")
             return
         }
         guard !AutoPaste.isSecureInputEnabled else {
-            log.debug("Screen context skipped: secure event input active")
+            log.info("Screen context skipped: secure event input active")
             return
         }
+
+        log.info("Screen context capture dispatched for \(appName ?? "(unknown)", privacy: .public) pid=\(targetPID, privacy: .public)")
 
         DispatchQueue.global(qos: .userInitiated).async {
             let result = ScreenContextCapture.captureSync(
@@ -69,8 +71,13 @@ final class ScreenContextStore {
         // startCapture() may have already replaced the marker; in that case
         // our result is stale and must be dropped silently.
         guard let cur = current, cur.sessionID == sessionID else {
-            log.debug("Dropping screen context: session no longer active")
+            log.info("Dropping screen context: session no longer active")
             return
+        }
+        if let ctx = context {
+            log.info("Screen context published: app=\(ctx.appName ?? "?", privacy: .public) before=\(ctx.textBeforeCursor?.count ?? 0, privacy: .public)ch after=\(ctx.textAfterCursor?.count ?? 0, privacy: .public)ch")
+        } else {
+            log.info("Screen context published: nil (all gates failed or no readable text)")
         }
         current = (sessionID, context)
     }
