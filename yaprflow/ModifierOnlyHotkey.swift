@@ -49,6 +49,34 @@ final class ModifierOnlyHotkey {
     /// Carbon-style modifier mask (cmdKey | shiftKey | ...). Modifier-only.
     private var desiredMask: UInt32 = 0
 
+    /// Device-dependent bits the chord must match (left/right specific), so
+    /// left ⌘⇧ can be told apart from right ⌘⇧. 0 = match either side, and
+    /// learn+persist the side on the next trigger.
+    private var desiredSideMask: UInt = 0
+
+    /// Previous event's exactness (now side-aware, so it can't be re-derived
+    /// from `lastActiveMask` alone).
+    private var lastExact = false
+
+    /// Device side bits seen when the chord last became exact. Persisted as
+    /// the learned side only if recording ACTUALLY starts — so a left-side
+    /// ⌘⇧+key combo (poisoned before it engages) never trains the side.
+    private var armedSideBits: UInt = 0
+
+    /// Device-dependent CGEventFlags bits (NX_DEVICE*KEYMASK). These low bits
+    /// ride alongside the device-independent masks in an event's flags and
+    /// are the ONLY place macOS says which physical key was pressed.
+    private enum DeviceBit {
+        static let leftControl: UInt  = 0x0000_0001
+        static let leftShift: UInt    = 0x0000_0002
+        static let rightShift: UInt   = 0x0000_0004
+        static let leftCommand: UInt  = 0x0000_0008
+        static let rightCommand: UInt = 0x0000_0010
+        static let leftOption: UInt   = 0x0000_0020
+        static let rightOption: UInt  = 0x0000_0040
+        static let rightControl: UInt = 0x0000_2000
+    }
+
     /// Tracks what we observed on the previous event, so we can detect the
     /// "chord just became exact" / "exact → subset" / "exact → with-extras"
     /// transitions cleanly.
@@ -89,13 +117,14 @@ final class ModifierOnlyHotkey {
 
     private init() {}
 
-    func register(modifiers: UInt32) {
+    func register(modifiers: UInt32, sideMask: UInt = 0) {
         unregister()
         guard modifiers != 0 else {
             log.error("refusing to register modifier-only hotkey with empty mask")
             return
         }
         self.desiredMask = modifiers
+        self.desiredSideMask = sideMask
         resetState()
         installTapIfNeeded()
     }
@@ -125,6 +154,7 @@ final class ModifierOnlyHotkey {
         recordingMode = .none
         pendingFirstTap = false
         lastActiveMask = 0
+        lastExact = false
     }
 
     /// Recording ended by something other than the chord — Esc-cancel, max
@@ -261,15 +291,31 @@ final class ModifierOnlyHotkey {
 
         // Only flagsChanged drives modifier-set transitions below.
         guard type == .flagsChanged else { return }
+        _ = prevActive
 
         lastActiveMask = activeMask
 
-        let wasExact = (prevActive == desiredMask)
-        let isExact  = (activeMask == desiredMask)
+        // Side gate: when a side is pinned, the exact chord must ALSO have the
+        // right physical keys down. Left ⌘⇧ then never matches a right-pinned
+        // binding, so it stops colliding with left-side shortcuts.
+        let sideOK: Bool
+        if desiredSideMask == 0 {
+            sideOK = true
+        } else {
+            let bits = deviceSideBits(fromRaw: flagsRaw, forDesired: desiredMask)
+            sideOK = (bits & desiredSideMask) == desiredSideMask
+        }
+
+        let wasExact = lastExact
+        let isExact  = (activeMask == desiredMask) && sideOK
+        lastExact = isExact
         let hasExtraNow = (activeMask & ~desiredMask) != 0
 
         // Event A: chord just became exact.
         if !wasExact && isExact {
+            // Remember which side is down; only commit it as the learned side
+            // if recording actually starts (see startRecording).
+            armedSideBits = deviceSideBits(fromRaw: flagsRaw, forDesired: desiredMask)
             gesture = .armed
             if recordingMode == .none {
                 scheduleHoldEngage()
@@ -353,6 +399,12 @@ final class ModifierOnlyHotkey {
 
     private func startRecording(mode: RecordingMode) {
         guard recordingMode == .none, mode != .none else { return }
+        // Learn the side from a genuine trigger (not a poisoned combo) the
+        // first time an unpinned binding actually starts recording.
+        if desiredSideMask == 0, armedSideBits != 0 {
+            desiredSideMask = armedSideBits
+            persistLearnedSide(armedSideBits)
+        }
         recordingMode = mode
         invoke(Self.onStart)
     }
@@ -409,6 +461,41 @@ final class ModifierOnlyHotkey {
 
     private func invoke(_ handler: (@Sendable () -> Void)?) {
         handler?()
+    }
+
+    /// Extract the device-dependent (left/right) bits of the event that
+    /// correspond to the DESIRED modifiers only — stray sides of other
+    /// modifiers are ignored. Used both to gate matching and to learn the
+    /// side on first use.
+    private func deviceSideBits(fromRaw raw: UInt64, forDesired desired: UInt32) -> UInt {
+        let r = UInt(truncatingIfNeeded: raw)
+        var bits: UInt = 0
+        if desired & UInt32(cmdKey) != 0 {
+            bits |= r & (DeviceBit.leftCommand | DeviceBit.rightCommand)
+        }
+        if desired & UInt32(shiftKey) != 0 {
+            bits |= r & (DeviceBit.leftShift | DeviceBit.rightShift)
+        }
+        if desired & UInt32(optionKey) != 0 {
+            bits |= r & (DeviceBit.leftOption | DeviceBit.rightOption)
+        }
+        if desired & UInt32(controlKey) != 0 {
+            bits |= r & (DeviceBit.leftControl | DeviceBit.rightControl)
+        }
+        return bits
+    }
+
+    /// Persist a newly-learned side into the saved config so it survives
+    /// relaunch. Updates AppState for menu display but does NOT post
+    /// `yaprflowHotkeyChanged` — re-registering mid-gesture would tear down
+    /// the tap we're currently inside.
+    private func persistLearnedSide(_ mask: UInt) {
+        var cfg = AppState.shared.hotkey
+        guard cfg.isModifierOnly, cfg.sideMask != mask else { return }
+        cfg.sideMask = mask
+        AppState.shared.hotkey = cfg
+        cfg.save()
+        log.info("Learned modifier-only side (device mask \(mask, privacy: .public))")
     }
 
     /// Translate CGEventFlags (`NSEvent.ModifierFlags`-compatible mask) into

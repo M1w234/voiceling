@@ -452,7 +452,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             GlobalHotkey.shared.unregister()
             guard config.isValid else { return }
             wireModifierOnlyCallbacks()
-            ModifierOnlyHotkey.shared.register(modifiers: config.modifiers)
+            ModifierOnlyHotkey.shared.register(modifiers: config.modifiers, sideMask: config.sideMask)
         } else {
             ModifierOnlyHotkey.shared.unregister()
             wireHotkeyCallbacks(for: config.mode)

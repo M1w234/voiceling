@@ -16,10 +16,18 @@ struct HotkeyConfig: Codable, Equatable {
     var modifiers: UInt32
     var mode: HotkeyMode
 
-    init(keyCode: UInt32, modifiers: UInt32, mode: HotkeyMode = .tapToToggle) {
+    /// For modifier-only bindings: the device-dependent CGEventFlags bits
+    /// (NX_DEVICE*KEYMASK — left/right specific) the chord must match, so
+    /// yaprflow can distinguish left ⌘⇧ from right ⌘⇧ the way Wispr does.
+    /// 0 = side-agnostic (fires on either side, and `ModifierOnlyHotkey`
+    /// learns + persists the side on first use). Ignored for key bindings.
+    var sideMask: UInt
+
+    init(keyCode: UInt32, modifiers: UInt32, mode: HotkeyMode = .tapToToggle, sideMask: UInt = 0) {
         self.keyCode = keyCode
         self.modifiers = modifiers
         self.mode = mode
+        self.sideMask = sideMask
     }
 
     var isModifierOnly: Bool {
@@ -45,7 +53,7 @@ struct HotkeyConfig: Codable, Equatable {
     private static let defaultsKey = "yaprflow.hotkey.v1"
 
     private enum CodingKeys: String, CodingKey {
-        case keyCode, modifiers, mode
+        case keyCode, modifiers, mode, sideMask
     }
 
     init(from decoder: Decoder) throws {
@@ -53,6 +61,7 @@ struct HotkeyConfig: Codable, Equatable {
         self.keyCode = try c.decode(UInt32.self, forKey: .keyCode)
         self.modifiers = try c.decode(UInt32.self, forKey: .modifiers)
         self.mode = try c.decodeIfPresent(HotkeyMode.self, forKey: .mode) ?? .tapToToggle
+        self.sideMask = try c.decodeIfPresent(UInt.self, forKey: .sideMask) ?? 0
     }
 
     func save() {
