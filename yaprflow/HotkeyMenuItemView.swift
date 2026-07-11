@@ -21,6 +21,10 @@ final class HotkeyMenuItemView: MenuRowView {
     /// recorder happens to be armed no longer silently replaces the hotkey —
     /// the user must press the SAME chord twice.
     private var pendingCarbonMods: UInt32 = 0
+    /// Same confirm-twice guard for KEY-based captures (e.g. ⌘V). Without it,
+    /// pressing paste while the recorder was accidentally armed instantly
+    /// rebound the hotkey to ⌘V. nil = nothing staged.
+    private var pendingKeyConfig: HotkeyConfig?
 
     init() {
         super.init(symbolName: "keyboard", title: "Shortcut")
@@ -55,12 +59,15 @@ final class HotkeyMenuItemView: MenuRowView {
         recordedFlags = []
         sawNonModifierKey = false
         pendingCarbonMods = 0
+        pendingKeyConfig = nil
         reload()
     }
 
     override func refresh() {
         if isRecording {
-            if pendingCarbonMods != 0 {
+            if let keyCfg = pendingKeyConfig {
+                titleField.stringValue = "Press \(keyCfg.displayString) again to set"
+            } else if pendingCarbonMods != 0 {
                 let cfg = HotkeyConfig(
                     keyCode: HotkeyConfig.modifierOnlyKeyCode,
                     modifiers: pendingCarbonMods
@@ -219,11 +226,25 @@ final class HotkeyMenuItemView: MenuRowView {
         // modifier-only commit path in pollModifierFlags.
         sawNonModifierKey = true
 
-        let newConfig = HotkeyConfig(
+        let candidate = HotkeyConfig(
             keyCode: UInt32(event.keyCode),
             modifiers: carbonModifiers(from: flags),
             mode: AppState.shared.hotkey.mode
         )
+
+        // Confirm-twice guard: stage the first capture, commit only when the
+        // SAME key+modifiers are pressed again. Stops an accidental keypress
+        // (e.g. ⌘V while the row is armed) from instantly rebinding.
+        guard pendingKeyConfig?.keyCode == candidate.keyCode,
+              pendingKeyConfig?.modifiers == candidate.modifiers else {
+            pendingKeyConfig = candidate
+            pendingCarbonMods = 0
+            reload()
+            return true
+        }
+
+        let newConfig = candidate
+        pendingKeyConfig = nil
         AppState.shared.hotkey = newConfig
         newConfig.save()
         NotificationCenter.default.post(name: .yaprflowHotkeyChanged, object: nil)
