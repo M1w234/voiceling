@@ -86,7 +86,9 @@ struct NotchOverlayView: View {
         case .idle:                       return ""
         case .preparing(let message):     return message
         case .listening:
-            return state.liveTranscript.isEmpty ? "Listening…" : Self.wrappedTail(of: state.liveTranscript)
+            // No placeholder while waiting for speech — the live waveform IS
+            // the "listening" signal, and the bare pill reads cleaner.
+            return state.liveTranscript.isEmpty ? "" : Self.wrappedTail(of: state.liveTranscript)
         case .finishing:
             return state.liveTranscript.isEmpty ? "Processing…" : Self.wrappedTail(of: state.liveTranscript)
         case .correcting(let message):    return message
@@ -130,11 +132,13 @@ struct NotchOverlayView: View {
 private struct WaveformView: View {
     let level: Float
 
-    private static let barCount = 26
-    private static let barWidth: CGFloat = 2.5
-    private static let barSpacing: CGFloat = 2
-    private static let baseHeight: CGFloat = 3
-    private static let maxHeight: CGFloat = 20
+    // 14 bars ≈ 75 pt — compact enough to sit alone in the pill without
+    // reading as a long strip, still enough history to see speech shape.
+    private static let barCount = 14
+    private static let barWidth: CGFloat = 3
+    private static let barSpacing: CGFloat = 2.5
+    private static let baseHeight: CGFloat = 3.5
+    private static let maxHeight: CGFloat = 22
 
     /// Rolling normalized-amplitude history, oldest first.
     @State private var history: [Float] = Array(repeating: 0, count: barCount)
