@@ -54,6 +54,10 @@ final class ModifierOnlyHotkey {
     /// learn+persist the side on the next trigger.
     private var desiredSideMask: UInt = 0
 
+    /// When false (user enabled "Both Keyboard Sides"), side detection is
+    /// bypassed entirely: either side triggers and nothing is learned.
+    private var sideMatchingEnabled = true
+
     /// Previous event's exactness (now side-aware, so it can't be re-derived
     /// from `lastActiveMask` alone).
     private var lastExact = false
@@ -117,7 +121,7 @@ final class ModifierOnlyHotkey {
 
     private init() {}
 
-    func register(modifiers: UInt32, sideMask: UInt = 0) {
+    func register(modifiers: UInt32, sideMask: UInt = 0, sideMatching: Bool = true) {
         unregister()
         guard modifiers != 0 else {
             log.error("refusing to register modifier-only hotkey with empty mask")
@@ -125,6 +129,7 @@ final class ModifierOnlyHotkey {
         }
         self.desiredMask = modifiers
         self.desiredSideMask = sideMask
+        self.sideMatchingEnabled = sideMatching
         resetState()
         installTapIfNeeded()
     }
@@ -299,7 +304,7 @@ final class ModifierOnlyHotkey {
         // right physical keys down. Left ⌘⇧ then never matches a right-pinned
         // binding, so it stops colliding with left-side shortcuts.
         let sideOK: Bool
-        if desiredSideMask == 0 {
+        if !sideMatchingEnabled || desiredSideMask == 0 {
             sideOK = true
         } else {
             let bits = deviceSideBits(fromRaw: flagsRaw, forDesired: desiredMask)
@@ -400,8 +405,9 @@ final class ModifierOnlyHotkey {
     private func startRecording(mode: RecordingMode) {
         guard recordingMode == .none, mode != .none else { return }
         // Learn the side from a genuine trigger (not a poisoned combo) the
-        // first time an unpinned binding actually starts recording.
-        if desiredSideMask == 0, armedSideBits != 0 {
+        // first time an unpinned binding actually starts recording. Skipped
+        // when the user opted into both-sides.
+        if sideMatchingEnabled, desiredSideMask == 0, armedSideBits != 0 {
             desiredSideMask = armedSideBits
             persistLearnedSide(armedSideBits)
         }

@@ -25,6 +25,7 @@ final class AppState: ObservableObject {
     private static let preserveClipboardModeKey = "yaprflow.preserveClipboardMode"
     private static let duckWhileRecordingKey = "yaprflow.duckWhileRecording"
     private static let comparisonLogModeKey = "yaprflow.comparisonLogMode"
+    private static let bothKeyboardSidesKey = "yaprflow.bothKeyboardSides"
     private static let soundEffectsEnabledKey = "yaprflow.soundEffectsEnabled"
     private static let startSoundNameKey = "yaprflow.startSoundName"
     private static let stopSoundNameKey = "yaprflow.stopSoundName"
@@ -108,6 +109,16 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// For modifier-only shortcuts (e.g. ⌘⇧): when `false` (default), only the
+    /// physical side of the keyboard the shortcut was first triggered on fires
+    /// it — so left ⌘⇧ combos don't collide with dictation. When `true`, either
+    /// side triggers. No effect on key-based shortcuts.
+    @Published var bothKeyboardSides: Bool {
+        didSet {
+            UserDefaults.standard.set(bothKeyboardSides, forKey: Self.bothKeyboardSidesKey)
+        }
+    }
+
     /// When `true`, play a short system sound on recording start and stop.
     /// Defaults to on — chimes are a small but useful signal that the mic is
     /// actually live, especially on flaky hotkeys. The specific sounds are
@@ -188,6 +199,11 @@ final class AppState: ObservableObject {
             self.comparisonLogMode = stored
         } else {
             self.comparisonLogMode = false
+        }
+        if let stored = UserDefaults.standard.object(forKey: Self.bothKeyboardSidesKey) as? Bool {
+            self.bothKeyboardSides = stored
+        } else {
+            self.bothKeyboardSides = false
         }
         if let stored = UserDefaults.standard.object(forKey: Self.soundEffectsEnabledKey) as? Bool {
             self.soundEffectsEnabled = stored

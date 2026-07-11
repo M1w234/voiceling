@@ -100,6 +100,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         triggerItem.toolTip = "Tap to Toggle: press once to start, again to stop. Hold to Talk: hold the shortcut while you speak, release to stop."
         menu.addItem(triggerItem)
 
+        let bothSidesItem = NSMenuItem()
+        bothSidesItem.view = ToggleMenuItemView(
+            symbolName: "keyboard",
+            title: "Both Keyboard Sides",
+            publisher: AppState.shared.$bothKeyboardSides.eraseToAnyPublisher(),
+            get: { AppState.shared.bothKeyboardSides },
+            set: { newValue in
+                AppState.shared.bothKeyboardSides = newValue
+                // Re-register so the change takes effect immediately.
+                NotificationCenter.default.post(name: .yaprflowHotkeyChanged, object: nil)
+            }
+        )
+        bothSidesItem.toolTip = "For modifier-only shortcuts (e.g. ⌘⇧): off = only the side of the keyboard you first used it on triggers dictation, so left-side ⌘⇧ shortcuts don't collide. On = either side works. No effect on key-based shortcuts."
+        menu.addItem(bothSidesItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let streamingItem = NSMenuItem()
@@ -452,7 +467,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             GlobalHotkey.shared.unregister()
             guard config.isValid else { return }
             wireModifierOnlyCallbacks()
-            ModifierOnlyHotkey.shared.register(modifiers: config.modifiers, sideMask: config.sideMask)
+            ModifierOnlyHotkey.shared.register(
+                modifiers: config.modifiers,
+                sideMask: config.sideMask,
+                sideMatching: !AppState.shared.bothKeyboardSides
+            )
         } else {
             ModifierOnlyHotkey.shared.unregister()
             wireHotkeyCallbacks(for: config.mode)
