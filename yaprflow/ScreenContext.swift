@@ -14,6 +14,9 @@ nonisolated private let log = Logger(subsystem: "com.tmoreton.yaprflow", categor
 /// to pass to a local LLM as reference data.
 struct ScreenContext: Sendable {
     let appName: String?
+    /// Focused window's title (≤120 chars) — cheap, high-signal source of
+    /// proper nouns: document names, email subjects, project titles.
+    let windowTitle: String?
     /// Up to ~500 chars immediately before the cursor / selection start.
     let textBeforeCursor: String?
     /// Up to ~200 chars immediately after the cursor / selection end.
@@ -115,34 +118,71 @@ nonisolated enum ScreenContextCapture {
         let app = AXUIElementCreateApplication(targetPID)
         AXUIElementSetMessagingTimeout(app, axTimeout)
 
+        // Window title — captured before the focused-element gates because
+        // it's useful on its own (document names, email subjects) even when
+        // the focused element's text can't be read. Same denylist applies,
+        // so browsers/messengers/password managers never reach this point.
+        let windowTitle: String? = {
+            guard let winRef = copyAttribute(app, kAXFocusedWindowAttribute),
+                  CFGetTypeID(winRef) == AXUIElementGetTypeID() else { return nil }
+            let win = winRef as! AXUIElement
+            AXUIElementSetMessagingTimeout(win, axTimeout)
+            guard let title = readStringAttr(win, kAXTitleAttribute),
+                  !title.isEmpty else { return nil }
+            return trimToFirst(title, count: 120)
+        }()
+
         // Gate: focused element exists and is an AXUIElement.
         guard let focusedRef = copyAttribute(app, kAXFocusedUIElementAttribute),
               CFGetTypeID(focusedRef) == AXUIElementGetTypeID() else {
-            return nil
+            // No focused element to read — window title alone is still a
+            // useful hint for the polish.
+            guard let windowTitle else { return nil }
+            return ScreenContext(
+                appName: appName,
+                windowTitle: windowTitle,
+                textBeforeCursor: nil,
+                textAfterCursor: nil
+            )
         }
         let element = focusedRef as! AXUIElement
         AXUIElementSetMessagingTimeout(element, axTimeout)
 
-        // Gate: secure text field — refuse outright. Some password fields
-        // happily return cleartext via kAXValue; we don't even ask.
+        // Title-only fallback for paths where the field's text can't be
+        // read but nothing sensitive was detected.
+        func titleOnly() -> ScreenContext? {
+            guard let windowTitle else { return nil }
+            return ScreenContext(
+                appName: appName,
+                windowTitle: windowTitle,
+                textBeforeCursor: nil,
+                textAfterCursor: nil
+            )
+        }
+
+        // Gate: secure text field — refuse outright, title included. Some
+        // password fields happily return cleartext via kAXValue; we don't
+        // even ask, and the window title of a login context is itself
+        // something we'd rather not ship to the LLM.
         if let subrole = readStringAttr(element, kAXSubroleAttribute),
            subrole == "AXSecureTextField" {
             log.info("Screen context skipped: AXSecureTextField subrole")
             return nil
         }
 
-        // Gate: role allowlist. Skip if missing or unexpected — better to
-        // miss a custom-role editor than over-read a screen-reader-ish view.
+        // Gate: role allowlist. Skip the text read if missing or unexpected —
+        // better to miss a custom-role editor than over-read a screen-reader-
+        // ish view. The window title remains fair game.
         guard let role = readStringAttr(element, kAXRoleAttribute),
               allowedRoles.contains(role) else {
-            return nil
+            return titleOnly()
         }
 
         // Cursor / selection range.
         guard let selRange = readCFRange(element, kAXSelectedTextRangeAttribute),
               selRange.location >= 0,
               selRange.length >= 0 else {
-            return nil
+            return titleOnly()
         }
         let selStart = selRange.location
         let selEnd   = selRange.location + selRange.length
@@ -170,10 +210,10 @@ nonisolated enum ScreenContextCapture {
         if textBefore == nil && textAfter == nil {
             guard totalCount >= 0, totalCount <= maxFullValueChars else {
                 log.info("Screen context skipped: parameterized read failed and field too large (\(totalCount, privacy: .public)) for kAXValue fallback")
-                return nil
+                return titleOnly()
             }
             guard let full = readStringAttr(element, kAXValueAttribute) else {
-                return nil
+                return titleOnly()
             }
             let (b, a) = sliceAroundCursor(full, selStart: selStart, selEnd: selEnd)
             textBefore = b
@@ -186,11 +226,12 @@ nonisolated enum ScreenContextCapture {
         let trimmedAfter  = textAfter.map  { trimToFirst($0, count: charsAfter) } ?? ""
 
         if trimmedBefore.isEmpty && trimmedAfter.isEmpty {
-            return nil
+            return titleOnly()
         }
 
         return ScreenContext(
             appName: appName,
+            windowTitle: windowTitle,
             textBeforeCursor: trimmedBefore.isEmpty ? nil : trimmedBefore,
             textAfterCursor:  trimmedAfter.isEmpty  ? nil : trimmedAfter
         )
