@@ -12,7 +12,7 @@ import SwiftUI
 struct NotchOverlayView: View {
     @ObservedObject var state: AppState
 
-    private static let transcriptFont = Font.system(size: 13, weight: .medium)
+    private static let transcriptFont = Font.system(size: 12.5, weight: .medium)
     private static let maxCharsPerLine = 56
 
     /// Width of the indicator slot — matches the waveform's natural width so
@@ -20,7 +20,7 @@ struct NotchOverlayView: View {
     /// occupy the exact same footprint. This is what keeps the pill from
     /// "popping around" between states: the waveform zeroes out, the spinner
     /// appears in the same hole, the geometry never jumps.
-    private static let indicatorSlotWidth: CGFloat = 54
+    private static let indicatorSlotWidth: CGFloat = 48
 
     private var isListening: Bool {
         if case .listening = state.status { return true }
@@ -95,8 +95,8 @@ struct NotchOverlayView: View {
         }
         // While listening the button circles nest into the capsule's rounded
         // ends (Wispr-style caps); other states need a normal text inset.
-        .padding(.horizontal, isListening ? 5 : 14)
-        .padding(.vertical, 5)
+        .padding(.horizontal, isListening ? 4 : 13)
+        .padding(.vertical, 4)
         .background(
             Capsule(style: .continuous)
                 .fill(Color.black.opacity(0.92))
@@ -126,9 +126,9 @@ struct NotchOverlayView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: 10, weight: .bold))
                 .foregroundStyle(prominent ? Color.black.opacity(0.85) : Color.white.opacity(0.9))
-                .frame(width: 26, height: 26)
+                .frame(width: 23, height: 23)
                 .background(
                     Circle().fill(prominent ? Color.white.opacity(0.95) : Color.white.opacity(0.12))
                 )
@@ -223,12 +223,12 @@ struct NotchOverlayView: View {
 private struct WaveformView: View {
     let level: Float
 
-    // 10 bars ≈ 53 pt — sits in the pill like a badge, not a strip.
+    // 10 bars ≈ 47 pt — sits in the pill like a badge, not a strip.
     private static let barCount = 10
-    private static let barWidth: CGFloat = 3
+    private static let barWidth: CGFloat = 2.5
     private static let barSpacing: CGFloat = 2.5
     private static let baseHeight: CGFloat = 3
-    private static let maxHeight: CGFloat = 17
+    private static let maxHeight: CGFloat = 15
 
     /// Rolling normalized-amplitude history, oldest first.
     @State private var history: [Float] = Array(repeating: 0, count: barCount)
