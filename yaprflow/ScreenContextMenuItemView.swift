@@ -3,96 +3,45 @@ import Combine
 
 /// Menu row for the Screen Context toggle. Same three visible states as
 /// Auto-Paste — Off / On / Needs Permission — because it gates on the same
-/// macOS Accessibility permission.
-///
-/// Why a separate view instead of reusing AutoPasteMenuItemView: this feature
-/// READS text from other apps' fields, which is a meaningfully different
-/// privacy posture than synthesizing ⌘V. The label, icon, and tooltip should
-/// reflect that. Same TCC entry, different user-facing promise.
+/// macOS Accessibility permission. Separate class because this feature READS
+/// text from other apps, a different privacy promise than synthesizing ⌘V.
 @MainActor
-final class ScreenContextMenuItemView: NSView {
-    private let iconView = NSImageView()
-    private let titleField = NSTextField(labelWithString: "Screen Context")
-    private let stateField = NSTextField(labelWithString: "")
+final class ScreenContextMenuItemView: MenuRowView {
     private var cancellable: AnyCancellable?
 
     init() {
-        super.init(frame: NSRect(x: 0, y: 0, width: 220, height: 22))
-        autoresizingMask = [.width]
-        setupLayout()
-        refresh()
-
+        super.init(symbolName: "doc.text.magnifyingglass", title: "Screen Context")
         cancellable = AppState.shared.$screenContextMode
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.refresh() }
+            .sink { [weak self] _ in self?.reload() }
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
-    override var intrinsicContentSize: NSSize {
-        NSSize(width: NSView.noIntrinsicMetric, height: 22)
+    private var needsPermission: Bool {
+        AppState.shared.screenContextMode && !AutoPaste.hasAccessibility
     }
 
-    private func setupLayout() {
-        iconView.translatesAutoresizingMaskIntoConstraints = false
-        // "doc.text.magnifyingglass" reads as "look at the doc near the
-        // cursor" — distinct from Auto-Paste's "text.viewfinder" which
-        // implies inserting into a target.
-        iconView.image = NSImage(systemSymbolName: "doc.text.magnifyingglass", accessibilityDescription: nil)
-        iconView.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 12, weight: .regular)
-        addSubview(iconView)
-
-        titleField.translatesAutoresizingMaskIntoConstraints = false
-        titleField.font = NSFont.menuFont(ofSize: 0)
-        titleField.textColor = .labelColor
-        titleField.lineBreakMode = .byTruncatingTail
-        addSubview(titleField)
-
-        stateField.translatesAutoresizingMaskIntoConstraints = false
-        stateField.font = NSFont.menuFont(ofSize: 0)
-        stateField.textColor = .secondaryLabelColor
-        stateField.alignment = .right
-        addSubview(stateField)
-
-        NSLayoutConstraint.activate([
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            iconView.widthAnchor.constraint(equalToConstant: 16),
-            iconView.heightAnchor.constraint(equalToConstant: 16),
-
-            titleField.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 6),
-            titleField.centerYAnchor.constraint(equalTo: centerYAnchor),
-
-            stateField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            stateField.firstBaselineAnchor.constraint(equalTo: titleField.firstBaselineAnchor),
-            stateField.leadingAnchor.constraint(greaterThanOrEqualTo: titleField.trailingAnchor, constant: 16),
-        ])
-    }
-
-    private func refresh() {
-        let enabled = AppState.shared.screenContextMode
-        if !enabled {
+    override func refresh() {
+        if !AppState.shared.screenContextMode {
             stateField.stringValue = "Off"
-            stateField.textColor = .secondaryLabelColor
         } else if AutoPaste.hasAccessibility {
             stateField.stringValue = "On"
-            stateField.textColor = .secondaryLabelColor
         } else {
             stateField.stringValue = "Needs Permission"
-            stateField.textColor = .systemOrange
         }
     }
 
-    override func mouseDown(with event: NSEvent) {
+    override func applyStateColor() {
+        stateField.textColor = needsPermission ? .systemOrange : .secondaryLabelColor
+    }
+
+    override func rowClicked() {
         let enabled = AppState.shared.screenContextMode
         let trusted = AutoPaste.hasAccessibility
 
         if enabled && !trusted {
-            // "Needs Permission" → re-prompt; fall back to System Settings
-            // if the user previously denied (the synchronous prompt no
-            // longer surfaces a dialog at that point).
-            let nowTrusted = AutoPaste.promptForAccessibility()
-            if !nowTrusted {
+            if !AutoPaste.promptForAccessibility() {
                 AutoPaste.openAccessibilitySettings()
             }
         } else if !enabled {
@@ -104,7 +53,7 @@ final class ScreenContextMenuItemView: NSView {
             AppState.shared.screenContextMode = false
         }
 
-        refresh()
+        reload()
         enclosingMenuItem?.menu?.cancelTracking()
     }
 }
