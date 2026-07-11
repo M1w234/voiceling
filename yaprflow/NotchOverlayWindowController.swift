@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import OSLog
 import SwiftUI
 
@@ -10,24 +11,25 @@ final class NotchOverlayWindowController: NSWindowController, NSWindowDelegate {
 
     // Fixed window size. SwiftUI content sits inside (with its own padding
     // and rounded background) — the window's transparent backing means only
-    // the SwiftUI pill is visible. 280×44 is enough for the bars + a couple
-    // of lines of transcript.
-    private static let initialWidth: CGFloat = 280
-    private static let initialHeight: CGFloat = 44
+    // the SwiftUI pill is visible. Wide/tall enough for two transcript lines
+    // plus the cancel/finish buttons without clipping the pill's edges.
+    private static let initialWidth: CGFloat = 420
+    private static let initialHeight: CGFloat = 72
     /// Distance from the bottom of the visible screen frame to the bottom of
     /// the overlay pill. ~40 pt clears the Dock when shown.
     private static let bottomMargin: CGFloat = 40
 
+    private var mouseModeCancellable: AnyCancellable?
+
     convenience init() {
         let content = NotchOverlayView(state: AppState.shared)
-        let host = NSHostingController(rootView: content)
-        // Deliberately NOT setting `sizingOptions = [.intrinsicContentSize]`.
-        // The redesigned view's body can legitimately produce a 0×0 intrinsic
-        // size (when `state.status == .idle` and `displayText` is empty, the
-        // Text view is removed by an `if` clause, leaving only the level bars
-        // at ~15×4). When the hosting controller auto-resizes the window to
-        // match that intrinsic, the window collapses to 0×0 and disappears.
-        // Keep the window at its initial size; SwiftUI content centers inside.
+        // NSHostingView (not controller) with first-mouse acceptance: the
+        // window never becomes key, so without this the first click on the
+        // pill's cancel/finish buttons would only focus, not press.
+        // Deliberately NOT window-sizing from SwiftUI intrinsics — an idle/
+        // empty body can produce a ~0×0 intrinsic and collapse the window.
+        // The window keeps its fixed size; content centers inside.
+        let host = FirstMouseHostingView(rootView: content)
 
         let window = NotchOverlayWindow(
             contentRect: NSRect(x: 0, y: 0, width: Self.initialWidth, height: Self.initialHeight),
@@ -35,7 +37,7 @@ final class NotchOverlayWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.contentViewController = host
+        window.contentView = host
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = false
@@ -49,6 +51,19 @@ final class NotchOverlayWindowController: NSWindowController, NSWindowDelegate {
 
         self.init(window: window)
         window.delegate = self
+
+        // Accept clicks ONLY while listening (the cancel/finish buttons are
+        // showing). In every other state the window's transparent margins
+        // must not eat clicks destined for whatever sits underneath.
+        mouseModeCancellable = AppState.shared.$status
+            .receive(on: RunLoop.main)
+            .sink { [weak window] status in
+                if case .listening = status {
+                    window?.ignoresMouseEvents = false
+                } else {
+                    window?.ignoresMouseEvents = true
+                }
+            }
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -117,4 +132,20 @@ final class NotchOverlayWindowController: NSWindowController, NSWindowDelegate {
 private final class NotchOverlayWindow: NSWindow {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+}
+
+/// Hosting view that responds to the first click even though its window
+/// never becomes key — required for the pill's cancel/finish buttons.
+/// Concrete (not generic over Content): a generic NSHostingView subclass
+/// crashes the Swift 6.2 release-mode SIL inliner while specializing the
+/// implicit deinit, and we only ever host NotchOverlayView anyway.
+private final class FirstMouseHostingView: NSHostingView<NotchOverlayView> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    required init(rootView: NotchOverlayView) {
+        super.init(rootView: rootView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError() }
 }

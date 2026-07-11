@@ -16,19 +16,43 @@ struct NotchOverlayView: View {
     private static let cornerRadius: CGFloat = 18
     private static let maxCharsPerLine = 56
 
+    /// Width of the indicator slot — matches the waveform's natural width so
+    /// the spinner / checkmark that replace it during finishing/copied states
+    /// occupy the exact same footprint. This is what keeps the pill from
+    /// "popping around" between states: the waveform zeroes out, the spinner
+    /// appears in the same hole, the geometry never jumps.
+    private static let indicatorSlotWidth: CGFloat = 62
+
+    private var isListening: Bool {
+        if case .listening = state.status { return true }
+        return false
+    }
+
+    private var isIdle: Bool {
+        if case .idle = state.status { return true }
+        return false
+    }
+
     var body: some View {
         pill
-            // Window is a fixed-size transparent canvas (we deliberately don't
-            // let NSHostingController auto-shrink to the SwiftUI intrinsic, or
-            // an idle/empty body would collapse the window to 0×0). Filling
-            // the container and centering the pill puts it in the middle of
+            // Window is a fixed-size transparent canvas. Filling the
+            // container and centering the pill puts it in the middle of
             // the canvas regardless of how big the inner content is.
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var pill: some View {
         HStack(alignment: .center, spacing: 10) {
+            // Cancel — discard the dictation. Mirrors the Esc hotkey.
+            if isListening {
+                controlButton(symbol: "xmark", help: "Cancel (esc)") {
+                    TranscriptionController.shared.cancel()
+                }
+                .transition(.scale.combined(with: .opacity))
+            }
+
             leadingIndicator
+                .frame(width: Self.indicatorSlotWidth, height: 22)
 
             if !displayText.isEmpty {
                 Text(displayText)
@@ -38,8 +62,17 @@ struct NotchOverlayView: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: true, vertical: true)
             }
+
+            // Finish — stop recording and transcribe. Same as releasing /
+            // tapping the hotkey; also balances the pill.
+            if isListening {
+                controlButton(symbol: "checkmark", help: "Done") {
+                    TranscriptionController.shared.setActive(false)
+                }
+                .transition(.scale.combined(with: .opacity))
+            }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
@@ -50,6 +83,32 @@ struct NotchOverlayView: View {
                 .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
         )
         .fixedSize(horizontal: true, vertical: true)
+        // Retraction: as the session resolves to idle (right before the
+        // window's alpha fade), the pill shrinks slightly — reads as a
+        // smooth retract instead of a hard vanish.
+        .scaleEffect(isIdle ? 0.86 : 1)
+        // Animate ALL state-driven layout changes (buttons entering/leaving,
+        // indicator swaps, text growth) so nothing pops.
+        .animation(.spring(response: 0.30, dampingFraction: 0.85), value: state.status)
+        .animation(.easeOut(duration: 0.12), value: displayText)
+        .animation(.easeIn(duration: 0.15), value: isIdle)
+    }
+
+    private func controlButton(
+        symbol: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white.opacity(0.92))
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Color.white.opacity(0.14)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 
     @ViewBuilder
@@ -90,11 +149,16 @@ struct NotchOverlayView: View {
             // the "listening" signal, and the bare pill reads cleaner.
             return state.liveTranscript.isEmpty ? "" : Self.wrappedTail(of: state.liveTranscript)
         case .finishing:
-            return state.liveTranscript.isEmpty ? "Processing…" : Self.wrappedTail(of: state.liveTranscript)
+            // Keep showing the transcript while the tail transcribes — the
+            // spinner in the indicator slot already says "processing", and
+            // swapping the text for a label would resize the pill.
+            return state.liveTranscript.isEmpty ? "" : Self.wrappedTail(of: state.liveTranscript)
         case .correcting(let message):    return message
         case .summarizing:                return "Summarizing…"
-        case .copied:                     return "Copied"
-        case .inserted:                   return "Inserted"
+        case .copied, .inserted:
+            // The green check is the signal; keep the final text in place so
+            // the pill doesn't jump sizes at the moment of completion.
+            return state.liveTranscript.isEmpty ? "Copied" : Self.wrappedTail(of: state.liveTranscript)
         case .error(let message):         return message
         }
     }
