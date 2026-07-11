@@ -132,13 +132,12 @@ struct NotchOverlayView: View {
 private struct WaveformView: View {
     let level: Float
 
-    // 14 bars ≈ 75 pt — compact enough to sit alone in the pill without
-    // reading as a long strip, still enough history to see speech shape.
-    private static let barCount = 14
-    private static let barWidth: CGFloat = 3
-    private static let barSpacing: CGFloat = 2.5
+    // 10 bars ≈ 62 pt — sits in the pill like a badge, not a strip.
+    private static let barCount = 10
+    private static let barWidth: CGFloat = 3.5
+    private static let barSpacing: CGFloat = 3
     private static let baseHeight: CGFloat = 3.5
-    private static let maxHeight: CGFloat = 22
+    private static let maxHeight: CGFloat = 21
 
     /// Rolling normalized-amplitude history, oldest first.
     @State private var history: [Float] = Array(repeating: 0, count: barCount)
@@ -149,6 +148,9 @@ private struct WaveformView: View {
                 Capsule(style: .continuous)
                     .fill(Color.white.opacity(opacity(at: idx)))
                     .frame(width: Self.barWidth, height: height(at: idx))
+                    // Soft halo lifts the bars off the near-black pill —
+                    // reads as glow, not blur, at this radius.
+                    .shadow(color: .white.opacity(0.35), radius: 2.5)
             }
         }
         .frame(height: Self.maxHeight)
@@ -157,9 +159,14 @@ private struct WaveformView: View {
             // the curve lets normal speech reach the upper range without
             // shouting, while keeping silence visibly flat.
             let amplified = min(1.0, newLevel * 3.5)
-            let shaped = pow(amplified, 0.65)
+            let shaped = pow(amplified, 0.6)
+            // Fast attack, smooth release: a bar may jump up instantly but
+            // never collapses faster than ~28%/sample, so word endings leave
+            // graceful decaying tails instead of flickering to the floor.
+            let previous = history.last ?? 0
+            let smoothed = max(shaped, previous * 0.72)
             history.removeFirst()
-            history.append(shaped)
+            history.append(smoothed)
         }
         .animation(.linear(duration: 0.05), value: history)
     }
@@ -168,10 +175,11 @@ private struct WaveformView: View {
         Self.baseHeight + CGFloat(history[index]) * (Self.maxHeight - Self.baseHeight)
     }
 
-    /// Older samples fade toward the left edge so the trail dissolves
-    /// instead of ending in a hard cliff.
+    /// Older samples dissolve toward the left edge; the ease curve keeps the
+    /// newest few bars near full brightness so the "now" end feels alive.
     private func opacity(at index: Int) -> Double {
-        0.30 + 0.62 * (Double(index) / Double(Self.barCount - 1))
+        let fraction = Double(index) / Double(Self.barCount - 1)
+        return 0.22 + 0.72 * pow(fraction, 1.5)
     }
 }
 
