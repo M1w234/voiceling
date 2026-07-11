@@ -16,6 +16,11 @@ final class HotkeyMenuItemView: MenuRowView {
     private var sawNonModifierKey: Bool = false
     private var pollTimer: Timer?
     private var lastPolledFlags: NSEvent.ModifierFlags = []
+    /// A modifier-only chord captured once, awaiting a confirming second
+    /// press. Guards against accidental rebinds: a single stray ⌘⇧ while the
+    /// recorder happens to be armed no longer silently replaces the hotkey —
+    /// the user must press the SAME chord twice.
+    private var pendingCarbonMods: UInt32 = 0
 
     init() {
         super.init(symbolName: "keyboard", title: "Shortcut")
@@ -49,12 +54,21 @@ final class HotkeyMenuItemView: MenuRowView {
         isRecording = false
         recordedFlags = []
         sawNonModifierKey = false
+        pendingCarbonMods = 0
         reload()
     }
 
     override func refresh() {
         if isRecording {
-            titleField.stringValue = "Press a shortcut…"
+            if pendingCarbonMods != 0 {
+                let cfg = HotkeyConfig(
+                    keyCode: HotkeyConfig.modifierOnlyKeyCode,
+                    modifiers: pendingCarbonMods
+                )
+                titleField.stringValue = "Press \(cfg.displayString) again to set"
+            } else {
+                titleField.stringValue = "Press a shortcut…"
+            }
             stateField.stringValue = "esc"
         } else {
             titleField.stringValue = "Shortcut"
@@ -138,6 +152,17 @@ final class HotkeyMenuItemView: MenuRowView {
                 recordedFlags = []
                 return
             }
+
+            // First capture (or a different chord than last time): stage it
+            // and ask for a confirming repeat. Prevents accidental rebinds.
+            guard pendingCarbonMods == carbonMods else {
+                pendingCarbonMods = carbonMods
+                recordedFlags = []
+                reload()
+                return
+            }
+
+            // Confirmed — same chord pressed twice. Commit.
             let newConfig = HotkeyConfig(
                 keyCode: HotkeyConfig.modifierOnlyKeyCode,
                 modifiers: carbonMods,
@@ -149,6 +174,7 @@ final class HotkeyMenuItemView: MenuRowView {
 
             isRecording = false
             recordedFlags = []
+            pendingCarbonMods = 0
             reload()
             enclosingMenuItem?.menu?.cancelTracking()
         }
