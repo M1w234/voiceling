@@ -88,13 +88,24 @@ final class TranscriptionController {
     /// runs without a hint and the user gets normal correction.
     private let screenContextStore = ScreenContextStore()
 
-    // Long maxSpeechDuration (60s) for continuous dictation without forced chunks.
-    // Silence-based segmentation handles natural pauses.
+    // Segmentation tuned to STOP over-chopping continuous speech, which was the
+    // main cause of dropped words. Every segment boundary is a place transducer
+    // ASR (Parakeet) deletes words (worst-case deletions happen at chunk edges),
+    // and the silence gap between one segment's end and the next's start is
+    // discarded outright. The old 0.3s silence threshold split a normal sentence
+    // at every little inter-word pause.
+    //   - minSilenceDuration 0.8s: only a deliberate pause between separate
+    //     thoughts ends a segment; natural mid-sentence pauses stay in one piece.
+    //     Costs nothing on the final text (push-to-talk flushes the tail on
+    //     release) and the speculative partials still update the live preview.
+    //   - speechPadding 0.25s: pads each segment's edges so word onsets/offsets
+    //     aren't clipped, and overlaps the silence gap so no audio is lost.
+    //   - minSpeechDuration 0.1s: don't drop very short isolated words ("a", "I").
     private let segmentationConfig = VadSegmentationConfig(
-        minSpeechDuration: 0.15,
-        minSilenceDuration: 0.3,
+        minSpeechDuration: 0.1,
+        minSilenceDuration: 0.8,
         maxSpeechDuration: 60.0,
-        speechPadding: 0.1
+        speechPadding: 0.25
     )
 
     // Speculative partials: re-transcribe in-progress speech every 2.0s.
