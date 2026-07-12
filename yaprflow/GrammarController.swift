@@ -346,6 +346,11 @@ final class GrammarController {
     }
 
     func correct(text: String, progress: @escaping @MainActor (String) -> Void) async throws -> String {
+        // Skip grammar on very short utterances. There's nothing to fix, and
+        // the small model tends to scramble them ("There you go." → "Go
+        // there."). Also saves a model load + inference on one-liners.
+        if Self.isTooShortToPolish(text) { return text }
+
         let container = try await ensureLoaded(progress: progress)
 
         let userJSON = try encodeUserMessage(transcript: text)
@@ -374,6 +379,8 @@ final class GrammarController {
         context: ScreenContext?,
         progress: @escaping @MainActor (String) -> Void
     ) async throws -> String {
+        if Self.isTooShortToPolish(text) { return text }
+
         guard let ctx = context, Self.hasUsableText(ctx) else {
             return try await correct(text: text, progress: progress)
         }
@@ -544,14 +551,64 @@ final class GrammarController {
         return text
     }
 
+    /// Fewer than this many words → skip the grammar model entirely.
+    private static let minWordsToPolish = 4
+
+    private static func wordCount(_ s: String) -> Int {
+        s.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).count
+    }
+
+    private static func isTooShortToPolish(_ text: String) -> Bool {
+        wordCount(text) < minWordsToPolish
+    }
+
+    /// Word-level similarity (1 − normalized token edit distance). A genuine
+    /// grammar edit keeps almost all of the original words in order and scores
+    /// high; a rewrite, an answered request, or an invented completion scores
+    /// low. This is the structural backstop the prompt alone can't provide.
+    private static func tokenSimilarity(_ a: String, _ b: String) -> Double {
+        let ta = a.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        let tb = b.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+        if ta.isEmpty && tb.isEmpty { return 1 }
+        if ta.isEmpty || tb.isEmpty { return 0 }
+        // Levenshtein on token arrays.
+        var prev = Array(0...tb.count)
+        var cur = [Int](repeating: 0, count: tb.count + 1)
+        for i in 1...ta.count {
+            cur[0] = i
+            for j in 1...tb.count {
+                let cost = ta[i - 1] == tb[j - 1] ? 0 : 1
+                cur[j] = min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+            }
+            swap(&prev, &cur)
+        }
+        let dist = prev[tb.count]
+        return 1.0 - Double(dist) / Double(max(ta.count, tb.count))
+    }
+
+    /// Below this raw↔polished token similarity, treat the output as a rewrite
+    /// and keep the faithful transcript instead. Tuned from the comparison-log
+    /// study: real edits sat well above ~0.7; the rewrites/answered-requests
+    /// sat below ~0.5.
+    private static let minCorrectionSimilarity = 0.55
+
     private static func isPlausibleCorrection(_ candidate: String, of original: String) -> Bool {
         let originalTrimmed = original.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !originalTrimmed.isEmpty else { return false }
 
         let originalCount = max(originalTrimmed.count, 1)
         let candidateCount = candidate.count
-        let expansionLimit = max(originalCount * 3, originalCount + 120)
+        // Tightened from 3× to 2× (or +80 chars): the model was inventing
+        // continuations of truncated speech ("Why do organic pesticides and"
+        // → "…synthetic pesticides differ in…").
+        let expansionLimit = max(originalCount * 2, originalCount + 80)
         if candidateCount > expansionLimit { return false }
+
+        // Structural rewrite guard — the big one from the study.
+        if tokenSimilarity(candidate, originalTrimmed) < minCorrectionSimilarity {
+            log.info("Grammar correction rejected: diverges too far from transcript (rewrite/answered request); kept original")
+            return false
+        }
 
         let lower = candidate.lowercased()
         let lowerOriginal = originalTrimmed.lowercased()
