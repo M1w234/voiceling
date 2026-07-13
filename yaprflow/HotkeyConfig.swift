@@ -12,6 +12,14 @@ struct HotkeyConfig: Codable, Equatable {
     /// Carbon's `RegisterEventHotKey` — they're handled by `ModifierOnlyHotkey`.
     static let modifierOnlyKeyCode: UInt32 = 0
 
+    /// Sentinel bit for the Fn / 🌐 (Globe) key inside `modifiers`. Fn isn't a
+    /// Carbon modifier (no cmdKey-style constant) and can't be a Carbon key
+    /// code either, so we represent it with a high bit that never collides
+    /// with the low-bit Carbon modifier masks. `ModifierOnlyHotkey` maps it
+    /// to/from `CGEventFlags.maskSecondaryFn`. Fn is the natural dictation key
+    /// on modern Mac laptops, so it's allowed as a stand-alone trigger.
+    static let fnBit: UInt32 = 0x8000_0000
+
     var keyCode: UInt32
     var modifiers: UInt32
     var mode: HotkeyMode
@@ -40,7 +48,12 @@ struct HotkeyConfig: Codable, Equatable {
     /// while thinking about a shortcut would start dictation. Each Carbon
     /// modifier flag is one bit, so the bit count is the modifier count.
     var isValid: Bool {
-        if isModifierOnly { return modifiers.nonzeroBitCount >= 2 }
+        if isModifierOnly {
+            // Fn alone is a legitimate single-key trigger (it's a dedicated
+            // key, not a chord you accidentally hold while typing). Every
+            // other modifier-only binding still needs a chord of ≥2.
+            return modifiers == Self.fnBit || modifiers.nonzeroBitCount >= 2
+        }
         return true
     }
 
@@ -76,6 +89,7 @@ struct HotkeyConfig: Codable, Equatable {
 
     var displayString: String {
         var s = ""
+        if modifiers & Self.fnBit != 0         { s += "🌐" }
         if modifiers & UInt32(controlKey) != 0 { s += "⌃" }
         if modifiers & UInt32(optionKey) != 0  { s += "⌥" }
         if modifiers & UInt32(shiftKey) != 0   { s += "⇧" }

@@ -516,6 +516,7 @@ final class ModifierOnlyHotkey {
         if raw & UInt64(CGEventFlags.maskShift.rawValue)     != 0 { mods |= UInt32(shiftKey) }
         if raw & UInt64(CGEventFlags.maskAlternate.rawValue) != 0 { mods |= UInt32(optionKey) }
         if raw & UInt64(CGEventFlags.maskControl.rawValue)   != 0 { mods |= UInt32(controlKey) }
+        if raw & UInt64(CGEventFlags.maskSecondaryFn.rawValue) != 0 { mods |= HotkeyConfig.fnBit }
         return mods
     }
 }

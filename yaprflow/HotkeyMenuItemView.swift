@@ -151,11 +151,12 @@ final class HotkeyMenuItemView: MenuRowView {
         // never pressed a non-modifier key during this recording.
         if current.isEmpty && !recordedFlags.isEmpty && !sawNonModifierKey {
             let carbonMods = carbonModifiers(from: recordedFlags)
-            // A single modifier is too easy to hit during normal typing —
-            // holding ⌘ for 200 ms while thinking about a shortcut would
-            // start dictation. Require a chord of at least two; ignore the
-            // release and let the user try again.
-            guard carbonMods.nonzeroBitCount >= 2 else {
+            // A single standard modifier is too easy to hit during normal
+            // typing — holding ⌘ for 200 ms while thinking about a shortcut
+            // would start dictation. Require a chord of at least two. Fn / 🌐
+            // alone is exempt: it's a dedicated key, not a chord you hold
+            // while typing (the natural dictation key on Mac laptops).
+            guard carbonMods == HotkeyConfig.fnBit || carbonMods.nonzeroBitCount >= 2 else {
                 recordedFlags = []
                 return
             }
@@ -189,10 +190,11 @@ final class HotkeyMenuItemView: MenuRowView {
 
     private func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
         var mods: UInt32 = 0
-        if flags.contains(.command) { mods |= UInt32(cmdKey) }
-        if flags.contains(.option)  { mods |= UInt32(optionKey) }
-        if flags.contains(.control) { mods |= UInt32(controlKey) }
-        if flags.contains(.shift)   { mods |= UInt32(shiftKey) }
+        if flags.contains(.command)  { mods |= UInt32(cmdKey) }
+        if flags.contains(.option)   { mods |= UInt32(optionKey) }
+        if flags.contains(.control)  { mods |= UInt32(controlKey) }
+        if flags.contains(.shift)    { mods |= UInt32(shiftKey) }
+        if flags.contains(.function) { mods |= HotkeyConfig.fnBit }  // Fn / 🌐 key
         return mods
     }
 
