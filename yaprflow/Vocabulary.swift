@@ -71,7 +71,21 @@ final class VocabularyStore {
     /// Replace known mis-hearings with their preferred terms.
     func applyReplacements(to text: String) -> String {
         var result = text
+        // 1) User vocabulary — curated mis-hearing → preferred-spelling phrases.
         for (regex, term) in compiled {
+            let range = NSRange(result.startIndex..., in: result)
+            result = regex.stringByReplacingMatches(
+                in: result,
+                options: [],
+                range: range,
+                withTemplate: NSRegularExpression.escapedTemplate(for: term)
+            )
+        }
+        // 2) Built-in casing — unambiguous tech-term capitalization the ASR
+        // routinely lowercases ("github" → "GitHub", "ios" → "iOS"). Safe
+        // because it only changes CASE of a word that's always spelled that
+        // way; never substitutes one word for another.
+        for (regex, term) in Self.builtinCasing {
             let range = NSRange(result.startIndex..., in: result)
             result = regex.stringByReplacingMatches(
                 in: result,
@@ -82,6 +96,29 @@ final class VocabularyStore {
         }
         return result
     }
+
+    /// Unambiguous tech-term casing corrections, applied to every transcript
+    /// regardless of the user's vocabulary. These fix CASE only — the word is
+    /// always spelled this way in tech usage, so there's no false-positive
+    /// risk the way a word→different-word substitution would carry.
+    private static let builtinCasing: [(NSRegularExpression, String)] = {
+        let map: [(String, String)] = [
+            ("github", "GitHub"), ("ios", "iOS"), ("macos", "macOS"),
+            ("iphone", "iPhone"), ("ipad", "iPad"), ("macbook", "MacBook"),
+            ("imessage", "iMessage"), ("imessages", "iMessages"),
+            ("xcode", "Xcode"), ("javascript", "JavaScript"),
+            ("typescript", "TypeScript"), ("json", "JSON"), ("url", "URL"),
+            ("api", "API"), ("css", "CSS"), ("html", "HTML"), ("sql", "SQL"),
+            ("vs code", "VS Code"), ("mlx", "MLX"),
+        ]
+        return map.compactMap { phrase, term in
+            let pattern = "\\b" + NSRegularExpression.escapedPattern(for: phrase) + "\\b"
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                return nil
+            }
+            return (regex, term)
+        }
+    }()
 
     /// Re-read the file if it changed on disk (hand edits, external tools).
     /// Called at each recording start — a tiny stat + occasional small read.
@@ -124,9 +161,18 @@ final class VocabularyStore {
     }
 
     private func seedDefaultFile() {
+        // Phrase-level entries only for terms that collide with common words
+        // ("cloud code" → "Claude Code", NOT bare "cloud" → "Claude", which
+        // would wreck "cloud storage"). Built-in tech casing (GitHub, iOS…)
+        // lives in code, not here.
         let seed = VocabularyFile(entries: [
             VocabularyEntry(term: "yaprflow", misheard: ["yapper flow", "yabber flow", "yaper flow", "yapperflow"]),
             VocabularyEntry(term: "Wispr Flow", misheard: ["whisper flow", "whisperflow", "wisper flow"]),
+            VocabularyEntry(term: "Claude Code", misheard: ["cloud code", "clawed code", "clod code", "claude code"]),
+            VocabularyEntry(term: "Claude desktop", misheard: ["cloud desktop"]),
+            VocabularyEntry(term: "Claude", misheard: ["claud"]),
+            VocabularyEntry(term: "Codex", misheard: ["code x", "co-decks", "codeex", "codex"]),
+            VocabularyEntry(term: "Fable 5", misheard: ["fable five", "able five"]),
         ])
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
