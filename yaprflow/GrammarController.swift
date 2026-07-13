@@ -534,8 +534,11 @@ final class GrammarController {
     /// singles included deliberately — a whole-transcript 'wrap' is never a
     /// legitimate correction of an unquoted dictation.
     private static let wrappingQuotePairs: [(Character, Character)] = [
-        ("\"", "\""), ("\u{201C}", "\u{201D}"), ("'", "'"),
+        ("\"", "\""), ("\u{201C}", "\u{201D}"),
         ("\u{2018}", "\u{2019}"), ("\u{00AB}", "\u{00BB}"),
+        // Straight apostrophe deliberately excluded: it collides with real
+        // dictation ('twas … nothin'), and a transcript genuinely wrapped in
+        // straight single quotes is vanishingly rare.
     ]
 
     private static func stripIntroducedWrappingQuotes(_ s: String, original: String) -> String {

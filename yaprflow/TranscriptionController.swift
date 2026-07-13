@@ -404,13 +404,16 @@ final class TranscriptionController {
             }
             CancelHotkey.shared.register()
             maxDurationTask?.cancel()
+            let durationSessionID = currentSessionID
             maxDurationTask = Task { @MainActor in
                 do {
                     try await Task.sleep(for: .seconds(maxSessionDuration))
                 } catch {
                     return
                 }
-                guard self.isActive else { return }
+                // Session-identity guard so a stale timer can't stop a newer
+                // recording, on top of the cancel() in start()/stop()/cancel().
+                guard self.isActive, self.currentSessionID == durationSessionID else { return }
                 log.info("Max session duration reached — auto-stopping")
                 self.setActive(false)
             }
@@ -711,16 +714,20 @@ final class TranscriptionController {
 
     private func enqueueSpeculative(samples: [Float], segmentStart: Int) {
         let previous = transcribeChain
+        let sessionID = currentSessionID
         transcribeChain = Task { [weak self] in
             await previous?.value
-            await self?.performSpeculative(samples: samples, segmentStart: segmentStart)
+            await self?.performSpeculative(samples: samples, segmentStart: segmentStart, sessionID: sessionID)
         }
     }
 
-    private func performSpeculative(samples: [Float], segmentStart: Int) async {
+    private func performSpeculative(samples: [Float], segmentStart: Int, sessionID: UUID) async {
         // Skip if the user already paused (speechEnd fired) — the confirmed
-        // transcribe is about to run and supersede this anyway.
-        guard currentSpeechStart == segmentStart, isActive else { return }
+        // transcribe is about to run and supersede this anyway. Session-ID
+        // check because sample offsets reset each recording, so segmentStart
+        // alone can collide across sessions and leak a stale preview into a
+        // new one.
+        guard sessionID == currentSessionID, currentSpeechStart == segmentStart, isActive else { return }
         guard let asr = asrManager else { return }
         do {
             let result = try await asr.transcribe(samples, source: .microphone)
@@ -728,7 +735,8 @@ final class TranscriptionController {
             await MainActor.run {
                 // Re-check relevance: the segment may have ended or a new one
                 // started by the time the transcribe returned.
-                guard self.isActive, self.currentSpeechStart == segmentStart else { return }
+                guard sessionID == self.currentSessionID,
+                      self.isActive, self.currentSpeechStart == segmentStart else { return }
                 self.volatileText = cleaned
                 self.state.liveTranscript = self.displayText()
             }

@@ -500,7 +500,10 @@ final class ModifierOnlyHotkey {
         guard cfg.isModifierOnly, cfg.sideMask != mask else { return }
         cfg.sideMask = mask
         AppState.shared.hotkey = cfg
-        cfg.save()
+        // Defer the disk write: this runs inside the CGEventTap callback on the
+        // first trigger, and a synchronous UserDefaults+JSON write there adds
+        // latency to the input-event path.
+        Task { @MainActor in cfg.save() }
         log.info("Learned modifier-only side (device mask \(mask, privacy: .public))")
     }
 

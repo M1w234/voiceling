@@ -61,13 +61,6 @@ final class VocabularyStore {
         reloadIfChanged()
     }
 
-    /// Preferred spellings for the grammar prompt; nil when the dictionary
-    /// is empty so the JSON payload stays minimal.
-    var promptTerms: [String]? {
-        let terms = entries.map(\.term)
-        return terms.isEmpty ? nil : terms
-    }
-
     /// Replace known mis-hearings with their preferred terms.
     func applyReplacements(to text: String) -> String {
         var result = text
