@@ -78,6 +78,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         VocabularyStore.shared.openInEditor()
     }
 
+    /// Re-launching or re-opening the app (Spotlight, double-click in Finder,
+    /// `open -a yaprflow`) pops the status menu at the pointer. On small
+    /// displays — especially notched laptops — the menu-bar icon can overflow
+    /// and become unreachable; this guarantees the menu is always accessible
+    /// without a visible icon.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        popUpStatusMenuAtPointer()
+        return true
+    }
+
+    private func popUpStatusMenuAtPointer() {
+        guard let menu = statusItem?.menu else { return }
+        // `in: nil` interprets the point in screen coordinates (bottom-left
+        // origin), which is what NSEvent.mouseLocation returns.
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }
