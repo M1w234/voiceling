@@ -57,9 +57,15 @@ struct HotkeyConfig: Codable, Equatable {
         return true
     }
 
+    // Default for fresh installs: ⌥⇧ (Option+Shift) held together. Modifier-
+    // only so there's no key that collides with app shortcuts (the old ⌘T
+    // default clashed with "new tab" everywhere), and no Fn/emoji conflict.
+    // Supports hold-to-talk and double-tap-to-lock out of the box. Needs
+    // Accessibility (which the app already needs for auto-paste); the first-
+    // launch flow surfaces that.
     static let defaultHotkey = HotkeyConfig(
-        keyCode: UInt32(kVK_ANSI_T),
-        modifiers: UInt32(cmdKey),
+        keyCode: modifierOnlyKeyCode,
+        modifiers: UInt32(optionKey | shiftKey),
         mode: .tapToToggle
     )
 
