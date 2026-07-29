@@ -18,23 +18,33 @@ A personal fork of [tmoreton/yaprflow](https://github.com/tmoreton/yaprflow) wit
 - ✍️ **Grammar correction** — optional on-device MLX LLM polishes transcripts before paste (inherited from upstream).
 - 📝 **Summarize** — condense any transcript on demand (inherited from upstream).
 
-## Install (build from source)
+## Install
 
-No signed releases — Apple Developer ID notarization would require their account. Build it yourself:
+The easiest path is the self-contained build on the
+[latest GitHub Release](https://github.com/M1w234/yaprflow-mw/releases/latest).
+Download `yaprflow-team-install.zip`, unzip it, and double-click
+`Install yaprflow.command`. The speech model is already bundled.
+
+The app is not Apple-notarized, so macOS may ask you to approve it in
+**System Settings → Privacy & Security**. [SETUP.md](SETUP.md) has the complete
+permission walkthrough and an agent-friendly install prompt.
+
+**Requires an Apple-silicon Mac (M1 or newer) running macOS 14 Sonoma or later.**
+
+### Build from source
+
+Install the Hugging Face CLI first, then:
 
 ```bash
 git clone https://github.com/M1w234/yaprflow-mw.git
 cd yaprflow-mw
-HF_HUB_DISABLE_XET=1 huggingface-cli download FluidInference/parakeet-tdt-0.6b-v2-coreml \
-  --include "Preprocessor.mlmodelc/*" "Encoder.mlmodelc/*" "Decoder.mlmodelc/*" \
-            "JointDecision.mlmodelc/*" "parakeet_vocab.json" \
-  --local-dir Models/parakeet-tdt-0.6b-v2
+./scripts/fetch-models.sh
 ./scripts/dev-build.sh
 ```
 
-`dev-build.sh` does the full loop: builds Release with ad-hoc signing, replaces `/Applications/yaprflow.app`, strips Gatekeeper quarantine, and relaunches. ~3 min cold, ~30 s incremental.
-
-**Requires macOS 14 (Sonoma) or later.**
+`dev-build.sh` does the full loop: builds Release, applies the stable local
+signing identity when available, replaces `/Applications/yaprflow.app`, strips
+Gatekeeper quarantine, and relaunches. ~3 min cold, ~30 s incremental.
 
 ## Enabling auto-paste
 
@@ -55,7 +65,11 @@ Then click **Auto-Paste** in the menu again to re-prompt.
 ## What's deliberately different from upstream
 
 - **Bundle ID is unchanged** (`com.tmoreton.yaprflow`). This means your installed app shares the same mic / AX permissions as upstream — useful if you're switching between them.
-- **No notarized releases** — I can't sign on Tim's behalf. If you want a signed `.dmg`, grab the original from [tmoreton/yaprflow/releases](https://github.com/tmoreton/yaprflow/releases) and live without the additions.
+- **No notarized fork release** — the downloadable team build is self-signed and
+  requires the one-time Gatekeeper steps in [SETUP.md](SETUP.md). If you want
+  Tim's notarized `.dmg`, use the
+  [upstream releases](https://github.com/tmoreton/yaprflow/releases) and live
+  without this fork's additions.
 - **Overlay position moved** from top-of-screen (notch-attached) to bottom-center, where Wispr Flow puts theirs.
 
 ## Credits

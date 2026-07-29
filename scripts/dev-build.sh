@@ -60,7 +60,16 @@ fi
 
 echo "==> Quitting running yaprflow…"
 osascript -e 'tell application "yaprflow" to quit' 2>/dev/null || true
-sleep 1
+for _ in {1..20}; do
+    if ! pgrep -x yaprflow >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.5
+done
+if pgrep -x yaprflow >/dev/null 2>&1; then
+    echo "❌ yaprflow did not quit within 10 seconds; leaving the installed app untouched." >&2
+    exit 1
+fi
 
 echo "==> Installing to ${DEST}…"
 rm -rf "$DEST"

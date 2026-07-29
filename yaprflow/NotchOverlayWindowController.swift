@@ -21,6 +21,9 @@ final class NotchOverlayWindowController: NSWindowController, NSWindowDelegate {
     private static let bottomMargin: CGFloat = 10
 
     private var mouseModeCancellable: AnyCancellable?
+    /// Invalidates an older fade-out completion when a new session calls
+    /// show() before that animation finishes.
+    private var visibilityGeneration = 0
 
     convenience init() {
         let content = NotchOverlayView(state: AppState.shared)
@@ -74,6 +77,7 @@ final class NotchOverlayWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func show() {
+        visibilityGeneration += 1
         recenter()
         guard let window else {
             log.error("show(): window is nil")
@@ -94,11 +98,16 @@ final class NotchOverlayWindowController: NSWindowController, NSWindowDelegate {
 
     func hide() {
         guard let window else { return }
+        visibilityGeneration += 1
+        let generation = visibilityGeneration
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.18
             window.animator().alphaValue = 0
-        }, completionHandler: {
-            window.orderOut(nil)
+        }, completionHandler: { [weak self, weak window] in
+            Task { @MainActor in
+                guard self?.visibilityGeneration == generation else { return }
+                window?.orderOut(nil)
+            }
         })
     }
 

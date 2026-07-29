@@ -1,8 +1,20 @@
 # yaprflow — Setup
 
-**yaprflow** is a private, on-device dictation app for macOS. Hold a hotkey, talk, and your words are transcribed and pasted — entirely locally, nothing sent to the cloud.
+**yaprflow** is a privacy-first, on-device dictation app for macOS. Hold a
+hotkey, talk, and your words are transcribed and pasted — entirely locally,
+nothing sent to the cloud.
+
+**Compatibility:** Apple-silicon Mac (M1 or newer) running macOS 14 Sonoma or
+later. This build does not run on Intel Macs.
 
 ---
+
+## Easiest install
+
+Download `yaprflow-team-install.zip` from the
+[latest release](https://github.com/M1w234/yaprflow-mw/releases/latest), unzip
+it, and double-click **Install yaprflow.command**. Then continue at Step 2 below
+for the one-time macOS permissions.
 
 ## Install it with Claude Code (or Codex)
 
@@ -24,6 +36,7 @@ No building required — grab the ready-to-run app from the latest release:
 cd ~/Downloads
 curl -L -o yaprflow-team-install.zip \
   https://github.com/M1w234/yaprflow-mw/releases/latest/download/yaprflow-team-install.zip
+rm -rf yaprflow-team-install
 unzip -o yaprflow-team-install.zip
 cd yaprflow-team-install
 ```
@@ -79,6 +92,7 @@ If yes, free the Globe key from its default job first (on most Macs it opens the
 
 - **Can't find the menu-bar icon** (common on notched laptops — it overflows and hides): you don't need it to dictate, but to open the menu, **search "yaprflow" in Spotlight → Enter** and it pops up at your cursor. Or ⌘-drag menu-bar icons to make room.
 - **Hotkey does nothing:** almost always Accessibility (Step 4) isn't granted. Grant it, wait ~5s.
+- **App will not open on an Intel Mac:** this build requires Apple silicon (M1 or newer).
 - **No text / nothing transcribed:** check Microphone (Step 3). The very first recording after install can take ~30s while the model warms up (one-time).
 - **Is my voice going to the cloud?** No — transcription runs entirely on your Mac; the model is bundled in the app.
 - **Change settings/hotkey/sounds later:** open the menu (icon or the Spotlight trick) — shortcut, dictation mode, grammar, auto-paste, sounds, clipboard history (⌃⌥V), and personal vocabulary are all there.

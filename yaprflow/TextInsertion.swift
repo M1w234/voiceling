@@ -74,7 +74,16 @@ enum TextInsertion {
         let chunkSize = 20
         var index = 0
         while index < utf16.count {
-            let chunk = Array(utf16[index..<min(index + chunkSize, utf16.count)])
+            var end = min(index + chunkSize, utf16.count)
+            // Never split a UTF-16 surrogate pair across CGEvents. A lone
+            // high/low surrogate is malformed and many target apps replace
+            // each half with U+FFFD.
+            if end < utf16.count,
+               (0xD800...0xDBFF).contains(utf16[end - 1]),
+               (0xDC00...0xDFFF).contains(utf16[end]) {
+                end -= 1
+            }
+            let chunk = Array(utf16[index..<end])
             guard
                 let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
                 let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false)
@@ -85,7 +94,7 @@ enum TextInsertion {
             up.keyboardSetUnicodeString(stringLength: chunk.count, unicodeString: chunk)
             down.post(tap: .cghidEventTap)
             up.post(tap: .cghidEventTap)
-            index += chunkSize
+            index = end
         }
         return true
     }

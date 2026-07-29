@@ -21,9 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         _ = ClipboardHistoryStore.shared
 
         // Warm the ASR + VAD models in the background so the first hotkey press
-        // doesn't block on the ~30s Encoder compile. On first launch this also
-        // starts downloading the encoder from GitHub Releases in parallel with
-        // the onboarding flow.
+        // doesn't block on the ~30s Encoder compile. Release builds bundle the
+        // complete ASR and VAD models; the loader retains a network fallback
+        // for older or incomplete app bundles.
         TranscriptionController.shared.preload()
 
         // Preload the grammar model in the background if the user has enabled

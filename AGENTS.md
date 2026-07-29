@@ -11,8 +11,9 @@ Local-first macOS menubar dictation app. Cloned from [tmoreton/yaprflow](https:/
 | Installed app | `/Applications/yaprflow.app` |
 | Bundle ID | `com.tmoreton.yaprflow` (unchanged from upstream) |
 | Saved hotkey config | `~/Library/Containers/com.tmoreton.yaprflow/Data/Library/Preferences/com.tmoreton.yaprflow.plist` |
-| Speech model | `~/yaprflow/Models/parakeet-tdt-0.6b-v2/` (456 MB, gitignored) |
-| Signing | Ad-hoc (no Tim's Developer ID cert). Gatekeeper quarantine stripped on install. |
+| Speech models | `~/yaprflow/Models/parakeet-tdt-0.6b-v2/` plus `Models/silero-vad/` (gitignored) |
+| Signing | Local self-signed identity when available; otherwise ad-hoc. No Apple notarization. |
+| Friend build | `build/team-install/yaprflow-team-install.zip` via `scripts/create-team-install.sh` |
 
 ## Rebuild Loop (after editing source)
 
@@ -22,7 +23,9 @@ One command:
 cd ~/yaprflow && ./scripts/dev-build.sh
 ```
 
-Quits running yaprflow, builds Release with ad-hoc signing, replaces `/Applications/yaprflow.app`, strips quarantine, relaunches. First build ~3 min; incremental builds ~30 sec.
+Quits running yaprflow, builds Release, applies the stable local signing identity
+when available, replaces `/Applications/yaprflow.app`, strips quarantine, and
+relaunches. First build ~3 min; incremental builds ~30 sec.
 
 Manual equivalent:
 ```bash
@@ -38,7 +41,9 @@ open /Applications/yaprflow.app
 ## Architecture (the parts that matter)
 
 - **Sandboxed** (`yaprflow/yaprflow.entitlements`): app-sandbox + audio-input + network.client. Affects what hotkey APIs are usable.
-- **Hotkey**: Carbon `RegisterEventHotKey` via `GlobalHotkey.swift`. Sandbox-safe. Supports chord press+release events (which we use for push-to-talk).
+- **Hotkeys**: key-based shortcuts use Carbon `RegisterEventHotKey` via
+  `GlobalHotkey.swift`. Modifier-only shortcuts use a listen-only `CGEventTap`
+  in `ModifierOnlyHotkey.swift` and require Accessibility permission.
 - **Synchronized file groups**: `yaprflow.xcodeproj` uses Xcode 16 `PBXFileSystemSynchronizedRootGroup` — new `.swift` files in `yaprflow/` are auto-picked-up by the project. No `.pbxproj` editing.
 - **Speech pipeline**: `TranscriptionController` → `AudioCapture` → VAD (`FluidAudio`) → Parakeet ASR (MLX/CoreML mlmodelc bundles in `Models/`). Final text → clipboard.
 - **Grammar mode (optional)**: `GrammarController` runs a small MLX LLM on the transcript before pasting.
@@ -54,25 +59,37 @@ open /Applications/yaprflow.app
 | `AppDelegate.swift` | `wireHotkeyCallbacks(for:)` dispatches based on `config.mode`. Re-wires on `yaprflowHotkeyChanged`. |
 | `HotkeyMenuItemView.swift` | Removed "must have a modifier" guard so picker accepts F-keys, Space, etc. Mode preserved when re-recording. |
 | `HotkeyModeMenuItemView.swift` (new) | Toggle row in menu: "Tap to Toggle" ↔ "Hold to Talk". |
+| `ModifierOnlyHotkey.swift` | Side-aware modifier-only hold-to-talk plus double-tap-to-lock, with false-trigger rejection, Accessibility retry, and a 10-minute safety stop. |
+| `Vocabulary.swift` | Deterministic personal-vocabulary replacements and built-in proper-noun casing. |
+| `TextInsertion.swift` / history files | Clipboard-preserving insertion, dictation history, and guarded delivery to the original target app. |
 
-## Deferred Work (Layer 2)
+## Advanced Hotkey Safety
 
-After [Codex adversarial review](https://github.com/codex-ai) we deferred two features:
+Modifier-only hold and double-tap are implemented. Preserve these invariants
+when changing them:
 
-1. **Modifier-only trigger** (e.g. hold ⌘⇧ alone with no key). Needs `NSEvent.addGlobalMonitorForEvents(.flagsChanged)` which requires Accessibility permission via TCC. Also collides with every existing system shortcut that uses the same modifiers (⌘⇧4 screenshot etc.).
-2. **Double-tap modifier to toggle**. Same Accessibility requirement + needs a state machine that watches `.keyDown` between modifier transitions to reject false positives (tap ⌘ then press ⌘C looks like a double-tap).
-
-If we revisit, do it as a separate `.modifierHold` and `.modifierDoubleTap` mode behind an "Advanced" warning, with:
-- AX prompt + re-check on app activation
-- State machine: ignore taps if any non-modifier keyDown intervenes
-- Max recording duration safety + manual "Stop" fallback
-- Don't allow single ⌘ or single ⇧ as the trigger
+- Require Accessibility and retry event-tap installation after the user grants it.
+- Ignore a tap when any non-modifier keyDown or extra modifier intervenes.
+- Preserve side-aware matching so ordinary shortcuts on the other keyboard side
+  do not trigger dictation.
+- Keep the max recording duration and Esc/on-screen cancel fallbacks.
+- Do not allow a single standard modifier as the trigger. Globe/Fn is the
+  deliberate exception.
 
 ## Constraints / Gotchas
 
-- **No Developer ID cert** — must build with `CODE_SIGN_IDENTITY=-`. App runs locally but can't be distributed. Don't try to notarize or use `scripts/release.sh`.
+- **No usable Developer ID release identity** — local/team builds are
+  self-signed or ad-hoc and cannot be notarized. Do not use the notarizing path
+  in `scripts/release.sh`; use `scripts/dev-build.sh`, then
+  `scripts/create-team-install.sh`.
+- **Apple silicon only** — the MLX dependencies and distributed executable
+  target arm64. Friend-facing docs must say M1 or newer and macOS 14+.
 - **Metal Toolchain** — Xcode 16+ ships without it by default. If a fresh Xcode install fails the first build with `cannot execute tool 'metal'`, run `xcodebuild -downloadComponent MetalToolchain` (~700 MB one-time).
-- **Models** — `~/yaprflow/Models/parakeet-tdt-0.6b-v2/` must exist before build (Copy Models phase will fail otherwise). The upstream `scripts/fetch-models.sh` is broken in two ways on this machine: (1) the `models-v2` GitHub release tarball 404s, (2) it calls `hf` which on this Mac is the higgsfield CLI not HuggingFace. Use `huggingface-cli` directly:
+- **Models** — the Parakeet ASR and Silero VAD models under `~/yaprflow/Models/`
+  must exist before a fully offline build. `scripts/fetch-models.sh` downloads
+  both with `huggingface-cli` and
+  deliberately rejects the unrelated Higgsfield executable that also uses the
+  name `hf`. Manual equivalent:
   ```bash
   HF_HUB_DISABLE_XET=1 huggingface-cli download FluidInference/parakeet-tdt-0.6b-v2-coreml \
     --include "Preprocessor.mlmodelc/*" "Encoder.mlmodelc/*" "Decoder.mlmodelc/*" "JointDecision.mlmodelc/*" "parakeet_vocab.json" \
@@ -83,7 +100,14 @@ If we revisit, do it as a separate `.modifierHold` and `.modifierDoubleTap` mode
 
 ## Common Tasks
 
-- **"Add a new hotkey mode / trigger"** — touch `HotkeyMode` enum + `GlobalHotkey` callbacks + `AppDelegate.wireHotkeyCallbacks` + add a UI affordance. Re-read the deferred-work section first.
+- **"Add a new hotkey mode / trigger"** — touch `HotkeyMode` enum +
+  `GlobalHotkey`/`ModifierOnlyHotkey` callbacks +
+  `AppDelegate.wireHotkeyCallbacks` + add a UI affordance. Re-read the advanced
+  hotkey safety section first.
+- **"Publish a friend build"** — bump `MARKETING_VERSION`, run
+  `scripts/dev-build.sh`, then `scripts/create-team-install.sh`. The packaging
+  script refuses stale version metadata, missing models, invalid signatures, or
+  non-arm64 output before creating the zip.
 - **"Improve the menu UI"** — copy the `StreamingModeMenuItemView` / `HotkeyModeMenuItemView` pattern. Custom NSView, layout in `setupLayout()`, refresh on Combine subscription, mutate AppState on `mouseDown`.
 - **"Bump the speech model"** — update `scripts/fetch-models.sh` (or just download manually) + the `Models/` Copy Models phase reference in the .pbxproj.
 - **"Make this push upstream"** — `git remote add fork <your-fork-url>`, push branch, open a PR to tmoreton/yaprflow. Re-test under their Developer ID signing path before submitting.
@@ -91,5 +115,6 @@ If we revisit, do it as a separate `.modifierHold` and `.modifierDoubleTap` mode
 ## Don't Bother
 
 - Adding `NSAccessibilityUsageDescription` to Info.plist — that's a microphone-style usage string and isn't the right key for AX prompts (per Codex review).
-- Trying to keep the app sandboxed AND adopt `NSEvent` global monitors without TCC permission. Doesn't work.
+- Removing the Accessibility gate from modifier-only hotkeys. The listen-only
+  `CGEventTap` requires the user's explicit TCC grant.
 - Looking for a build cache shortcut — `xcodebuild` already caches SPM packages, MLX, etc. in `build.noindex/SourcePackages/`. Don't `git clean -fdx` that dir unless you want a fresh ~3 min build.
