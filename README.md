@@ -20,14 +20,11 @@ A personal fork of [tmoreton/yaprflow](https://github.com/tmoreton/yaprflow) wit
 
 ## Install
 
-The easiest path is the self-contained build on the
+The easiest path is the notarized disk image on the
 [latest GitHub Release](https://github.com/M1w234/yaprflow-mw/releases/latest).
-Download `yaprflow-team-install.zip`, unzip it, and double-click
-`Install yaprflow.command`. The speech model is already bundled.
-
-The app is not Apple-notarized, so macOS may ask you to approve it in
-**System Settings → Privacy & Security**. [SETUP.md](SETUP.md) has the complete
-permission walkthrough and an agent-friendly install prompt.
+Download the `.dmg`, open it, and drag **yaprflow** to Applications. The speech
+model is already bundled, and the app is signed and notarized by Apple.
+[SETUP.md](SETUP.md) has the complete permission walkthrough.
 
 **Requires an Apple-silicon Mac (M1 or newer) running macOS 14 Sonoma or later.**
 
@@ -57,19 +54,18 @@ Auto-paste needs macOS Accessibility permission (so we can synthesize ⌘V):
 If you ever rebuild from source, you may need to re-grant — ad-hoc signed apps get a fresh code-directory hash each build, which can invalidate the TCC entry. Quickest reset:
 
 ```bash
-tccutil reset Accessibility com.tmoreton.yaprflow
+tccutil reset Accessibility com.teamwong.yaprflow
 ```
 
 Then click **Auto-Paste** in the menu again to re-prompt.
 
 ## What's deliberately different from upstream
 
-- **Bundle ID is unchanged** (`com.tmoreton.yaprflow`). This means your installed app shares the same mic / AX permissions as upstream — useful if you're switching between them.
-- **No notarized fork release** — the downloadable team build is self-signed and
-  requires the one-time Gatekeeper steps in [SETUP.md](SETUP.md). If you want
-  Tim's notarized `.dmg`, use the
-  [upstream releases](https://github.com/tmoreton/yaprflow/releases) and live
-  without this fork's additions.
+- **Distinct bundle ID** (`com.teamwong.yaprflow`) so this fork has its own
+  signing identity, settings container, and macOS permission records.
+- **Notarized releases** — downloadable `.dmg` files are Developer ID signed,
+  submitted to Apple's notary service, stapled, and Gatekeeper-checked before
+  publishing.
 - **Overlay position moved** from top-of-screen (notch-attached) to bottom-center, where Wispr Flow puts theirs.
 
 ## Credits

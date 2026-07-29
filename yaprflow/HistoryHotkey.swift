@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "HistoryHotkey")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "HistoryHotkey")
 
 /// Global Carbon hotkey that toggles the clipboard history window.
 ///

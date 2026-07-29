@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "ComparisonLog")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "ComparisonLog")
 
 /// Passive capture for side-by-side dictation studies (yaprflow vs Wispr
 /// Flow running simultaneously). When enabled and a yaprflow session ends:

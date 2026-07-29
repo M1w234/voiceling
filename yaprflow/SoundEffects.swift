@@ -1,7 +1,7 @@
 import AppKit
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "SoundEffects")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "SoundEffects")
 
 /// Tiny wrapper around system sounds for the start/stop chimes. macOS ships
 /// these in `/System/Library/Sounds/`; `NSSound(named:)` finds them by basename

@@ -4,7 +4,7 @@ import MLXLMCommon
 import Tokenizers
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "Grammar")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "Grammar")
 
 // MARK: - GitHub Releases Downloader
 
@@ -25,7 +25,7 @@ private actor GrammarModelDownloader {
     /// tarball. Only the first caller's progress handler is honored.
     func downloadIfNeeded(progress: (@MainActor (String) -> Void)? = nil) async throws -> URL {
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("com.tmoreton.yaprflow/models", isDirectory: true)
+            .appendingPathComponent("com.teamwong.yaprflow/models", isDirectory: true)
         let modelDir = cacheDir.appendingPathComponent(modelDirName, isDirectory: true)
 
         // Already extracted?

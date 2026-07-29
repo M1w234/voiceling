@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Validate and package the self-contained friend build used by GitHub Releases.
+# Legacy self-signed installer. Prefer scripts/release.sh for friend releases.
+# Validate and package the self-contained friend build used by older releases.
 #
 # Usage:
 #   scripts/create-team-install.sh [path-to-yaprflow.app] [output-directory]

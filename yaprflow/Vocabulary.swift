@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "Vocabulary")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "Vocabulary")
 
 /// One dictionary entry: the correct spelling plus the phrases the ASR keeps
 /// mis-hearing it as ("yaprflow" ← "yapper flow", "yabber flow").

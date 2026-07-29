@@ -11,10 +11,10 @@ later. This build does not run on Intel Macs.
 
 ## Easiest install
 
-Download `yaprflow-team-install.zip` from the
-[latest release](https://github.com/M1w234/yaprflow-mw/releases/latest), unzip
-it, and double-click **Install yaprflow.command**. Then continue at Step 2 below
-for the one-time macOS permissions.
+Download the `.dmg` from the
+[latest release](https://github.com/M1w234/yaprflow-mw/releases/latest), open
+it, and drag **yaprflow** to **Applications**. Then continue at Step 2 below for
+the one-time macOS permissions.
 
 ## Install it with Claude Code (or Codex)
 
@@ -30,31 +30,23 @@ The agent then follows the steps below. (You can also just do them yourself.)
 
 **Agent: run the shell steps for the user; guide them through the clicks they must do themselves. This is a real, self-contained app — the ~450 MB speech model is bundled, so there's no separate model download and it runs offline.**
 
-### 0. Download the prebuilt app
-No building required — grab the ready-to-run app from the latest release:
+### 0. Download the notarized app
+No building required — grab the ready-to-run disk image from the latest release:
 ```bash
 cd ~/Downloads
-curl -L -o yaprflow-team-install.zip \
-  https://github.com/M1w234/yaprflow-mw/releases/latest/download/yaprflow-team-install.zip
-rm -rf yaprflow-team-install
-unzip -o yaprflow-team-install.zip
-cd yaprflow-team-install
+curl -L -o yaprflow.dmg \
+  https://github.com/M1w234/yaprflow-mw/releases/latest/download/yaprflow.dmg
+open yaprflow.dmg
 ```
 
-### 1. Install and clear the download quarantine
-```bash
-osascript -e 'tell application "yaprflow" to quit' 2>/dev/null || true
-rm -rf /Applications/yaprflow.app
-cp -R yaprflow.app /Applications/
-# yaprflow isn't from the App Store, so macOS quarantines it. This clears that:
-xattr -dr com.apple.quarantine /Applications/yaprflow.app
-open /Applications/yaprflow.app
-```
+### 1. Install
+Drag **yaprflow** from the opened disk image into **Applications**, then launch
+it from Applications.
 
 ### 2. If macOS says it "can't be opened" / "cannot check for malicious software"
-Expected — the app isn't notarized by Apple (it's a personal team build, not from the App Store). It's safe; it just isn't signed by a paid Apple developer account.
-- **Fix:** open **System Settings → Privacy & Security**, scroll to the bottom, click **"Open Anyway"** next to the yaprflow message, confirm.
-- If there's no "Open Anyway" button, re-run the `xattr -dr com.apple.quarantine …` line, then `open` it again.
+This release is signed and notarized by Apple, so that message is not expected.
+Delete the download and get a fresh copy from the GitHub release. Do not bypass
+Gatekeeper for a file from another source.
 
 ### 3. Grant Microphone access
 - The first time you start a recording, macOS asks → click **Allow**.

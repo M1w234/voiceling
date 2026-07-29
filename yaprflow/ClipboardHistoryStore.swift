@@ -2,7 +2,7 @@ import Combine
 import Foundation
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "ClipboardHistory")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "ClipboardHistory")
 
 /// One row in the clipboard history. `text` is the final transcript that
 /// landed on the clipboard (grammar-corrected if grammar mode was on; raw

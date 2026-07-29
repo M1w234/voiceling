@@ -3,7 +3,7 @@ import ApplicationServices
 import Carbon.HIToolbox
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "AutoPaste")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "AutoPaste")
 
 /// Synthesizes ⌘V into the currently-focused text field on behalf of the user.
 ///

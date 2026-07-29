@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 import CoreGraphics
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "ModifierOnlyHotkey")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "ModifierOnlyHotkey")
 
 /// Detects modifier-only hotkey gestures (e.g. ⌘⇧ alone, no third key) via a
 /// listen-only `CGEventTap`. Carbon's `RegisterEventHotKey` requires a non-

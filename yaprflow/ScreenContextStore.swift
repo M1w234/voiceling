@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "ScreenContextStore")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "ScreenContextStore")
 
 /// Holds the latest screen-context capture for the active recording session.
 ///

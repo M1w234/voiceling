@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "TextInsertion")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "TextInsertion")
 
 /// Inserts text into the focused field of another app WITHOUT touching the
 /// clipboard — the "Preserve Clipboard" delivery path.

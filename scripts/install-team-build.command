@@ -1,4 +1,5 @@
 #!/bin/bash
+# Legacy self-signed installer. Prefer the notarized GitHub Release DMG.
 # Friend-facing installer bundled by create-team-install.sh.
 
 set -euo pipefail

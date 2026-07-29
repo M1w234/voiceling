@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "CancelHotkey")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "CancelHotkey")
 
 /// Escape-to-cancel for an active dictation session. Registered ONLY while a
 /// recording is live and unregistered the moment it ends — while registered,

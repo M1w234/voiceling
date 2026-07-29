@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# Create a code-signed DMG (without notarization — no notary profile available).
+# Create a code-signed DMG without submitting it for notarization.
 # Usage: scripts/create-release-dmg.sh <path-to-app> [output-dmg]
 
 set -euo pipefail
 
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <path-to-app> [output-dmg]"
-    echo "Example: $0 /Users/tmoreton/Desktop/yaprflow.app"
+    echo "Example: $0 /path/to/yaprflow.app"
     exit 1
 fi
 
 APP="$1"
 DMG="${2:-$(pwd)/yaprflow.dmg}"
-SIGNING_IDENTITY="Developer ID Application: Tim Moreton (GVXC5FQ2RP)"
+SIGNING_IDENTITY="${DEVELOPER_ID_APPLICATION:-17530C078CB507252BC9CB8EEAA9143310583C56}"
 
 if [ ! -d "$APP" ]; then
     echo "Error: .app not found: $APP"

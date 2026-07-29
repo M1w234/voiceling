@@ -6,18 +6,30 @@ set -euo pipefail
 
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <path-to-app> [output-dmg]"
-    echo "Example: $0 /Users/tmoreton/Desktop/yaprflow.app"
-    echo "Example: $0 /Users/tmoreton/Desktop/yaprflow.app ./yaprflow.dmg"
+    echo "Example: $0 /path/to/yaprflow.app"
+    echo "Example: $0 /path/to/yaprflow.app ./yaprflow.dmg"
     exit 1
 fi
 
 APP="$1"
 DMG="${2:-$(pwd)/yaprflow.dmg}"
-KEYCHAIN_PROFILE="notary-yaprflow"
-SIGNING_IDENTITY="Developer ID Application: Tim Moreton (GVXC5FQ2RP)"
+KEYCHAIN_PROFILE="${NOTARY_PROFILE:-notary-yaprflow-mw}"
+SIGNING_IDENTITY="${DEVELOPER_ID_APPLICATION:-17530C078CB507252BC9CB8EEAA9143310583C56}"
 
 if [ ! -d "$APP" ]; then
     echo "Error: .app not found: $APP"
+    exit 1
+fi
+if ! codesign --verify --deep --strict "$APP"; then
+    echo "Error: input app does not have a valid code signature: $APP" >&2
+    exit 1
+fi
+if ! codesign -d --verbose=4 "$APP" 2>&1 | grep -Fq "Authority=Developer ID Application:"; then
+    echo "Error: input app is not signed with a Developer ID Application certificate" >&2
+    exit 1
+fi
+if ! codesign -d --verbose=4 "$APP" 2>&1 | grep -Eq "^CodeDirectory .*flags=.*\\(runtime\\)"; then
+    echo "Error: input app is not signed with hardened runtime enabled" >&2
     exit 1
 fi
 

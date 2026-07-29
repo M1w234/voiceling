@@ -3,7 +3,7 @@ import Combine
 import OSLog
 import SwiftUI
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "Overlay")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "Overlay")
 
 @MainActor
 final class NotchOverlayWindowController: NSWindowController, NSWindowDelegate {

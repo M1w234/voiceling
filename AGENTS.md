@@ -9,11 +9,11 @@ Local-first macOS menubar dictation app. Cloned from [tmoreton/yaprflow](https:/
 | Source | `~/yaprflow/` (this repo) |
 | Built app | `~/yaprflow/build.noindex/Build/Products/Release/yaprflow.app` |
 | Installed app | `/Applications/yaprflow.app` |
-| Bundle ID | `com.tmoreton.yaprflow` (unchanged from upstream) |
-| Saved hotkey config | `~/Library/Containers/com.tmoreton.yaprflow/Data/Library/Preferences/com.tmoreton.yaprflow.plist` |
+| Bundle ID | `com.teamwong.yaprflow` |
+| Saved hotkey config | `~/Library/Containers/com.teamwong.yaprflow/Data/Library/Preferences/com.teamwong.yaprflow.plist` |
 | Speech models | `~/yaprflow/Models/parakeet-tdt-0.6b-v2/` plus `Models/silero-vad/` (gitignored) |
-| Signing | Local self-signed identity when available; otherwise ad-hoc. No Apple notarization. |
-| Friend build | `build/team-install/yaprflow-team-install.zip` via `scripts/create-team-install.sh` |
+| Signing | Developer ID for releases; local self-signed identity for dev builds. |
+| Friend build | Notarized `build/yaprflow.dmg` via `scripts/release.sh` |
 
 ## Rebuild Loop (after editing source)
 
@@ -78,10 +78,11 @@ when changing them:
 
 ## Constraints / Gotchas
 
-- **No usable Developer ID release identity** — local/team builds are
-  self-signed or ad-hoc and cannot be notarized. Do not use the notarizing path
-  in `scripts/release.sh`; use `scripts/dev-build.sh`, then
-  `scripts/create-team-install.sh`.
+- **Developer ID release identity** — releases use Michael's Team Wong
+  Developer ID Application certificate (`QFHS76RR9M`). Xcode can submit an
+  archive interactively; future headless releases also require the one-time
+  `notary-yaprflow-mw` Keychain profile. Keep app-specific passwords and API
+  keys out of the repository.
 - **Apple silicon only** — the MLX dependencies and distributed executable
   target arm64. Friend-facing docs must say M1 or newer and macOS 14+.
 - **Metal Toolchain** — Xcode 16+ ships without it by default. If a fresh Xcode install fails the first build with `cannot execute tool 'metal'`, run `xcodebuild -downloadComponent MetalToolchain` (~700 MB one-time).
@@ -96,7 +97,8 @@ when changing them:
     --local-dir ~/yaprflow/Models/parakeet-tdt-0.6b-v2
   ```
 - **First recording delay** — ~30s on a cold launch while the Parakeet Encoder compiles. `TranscriptionController.preload()` runs at launch to warm this in the background.
-- **Mic permission** — granted in System Settings → Privacy → Microphone (yaprflow). Carries across builds since bundle ID is stable.
+- **Mic permission** — granted in System Settings → Privacy → Microphone
+  (yaprflow). The Team Wong bundle ID is stable across signed releases.
 
 ## Common Tasks
 
@@ -104,10 +106,10 @@ when changing them:
   `GlobalHotkey`/`ModifierOnlyHotkey` callbacks +
   `AppDelegate.wireHotkeyCallbacks` + add a UI affordance. Re-read the advanced
   hotkey safety section first.
-- **"Publish a friend build"** — bump `MARKETING_VERSION`, run
-  `scripts/dev-build.sh`, then `scripts/create-team-install.sh`. The packaging
-  script refuses stale version metadata, missing models, invalid signatures, or
-  non-arm64 output before creating the zip.
+- **"Publish a friend build"** — bump `MARKETING_VERSION` and
+  `CURRENT_PROJECT_VERSION`, then run `scripts/release.sh <version> --publish`.
+  The release path signs, notarizes, staples, and Gatekeeper-checks the DMG
+  before publishing it.
 - **"Improve the menu UI"** — copy the `StreamingModeMenuItemView` / `HotkeyModeMenuItemView` pattern. Custom NSView, layout in `setupLayout()`, refresh on Combine subscription, mutate AppState on `mouseDown`.
 - **"Bump the speech model"** — update `scripts/fetch-models.sh` (or just download manually) + the `Models/` Copy Models phase reference in the .pbxproj.
 - **"Make this push upstream"** — `git remote add fork <your-fork-url>`, push branch, open a PR to tmoreton/yaprflow. Re-test under their Developer ID signing path before submitting.

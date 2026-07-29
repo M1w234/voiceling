@@ -6,7 +6,7 @@ import OSLog
 // `nonisolated` because the project default is MainActor isolation and this
 // logger is referenced from `ScreenContextCapture.captureSync` which must
 // run on a background queue. Logger is Sendable so this is safe.
-nonisolated private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "ScreenContext")
+nonisolated private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "ScreenContext")
 
 /// Snapshot of what the user was looking at when they fired the hotkey.
 /// Carries at most ~700 chars of cursor-adjacent text plus the frontmost

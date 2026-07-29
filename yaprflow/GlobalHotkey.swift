@@ -2,7 +2,7 @@ import AppKit
 import Carbon.HIToolbox
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "GlobalHotkey")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "GlobalHotkey")
 
 @MainActor
 final class GlobalHotkey {

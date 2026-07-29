@@ -2,7 +2,7 @@ import AppKit
 import OSLog
 import ServiceManagement
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "LaunchAtLogin")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "LaunchAtLogin")
 
 @MainActor
 final class LaunchAtLoginMenuItemView: MenuRowView {

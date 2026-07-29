@@ -11,7 +11,7 @@
 #   scripts/release.sh 3.1.0 --publish --prerelease --notes "Adds launch-at-login"
 #   SKIP_NOTARIZE=1 scripts/release.sh                    # unsigned local test build
 #
-# Notarization credentials: by default this uses the `notary-yaprflow` keychain
+# Notarization credentials: by default this uses the `notary-yaprflow-mw` keychain
 # profile (created via `xcrun notarytool store-credentials`). Override with
 # NOTARY_PROFILE=<name>, or with APPLE_ID + APPLE_TEAM_ID + APPLE_APP_PASSWORD.
 
@@ -83,21 +83,32 @@ if [[ -f .env ]]; then
     set +a
 fi
 
+APPLE_TEAM_ID="${APPLE_TEAM_ID:-QFHS76RR9M}"
+NOTARY_PROFILE="${NOTARY_PROFILE:-notary-yaprflow-mw}"
+CODESIGN_IDENTITY="${DEVELOPER_ID_APPLICATION:-17530C078CB507252BC9CB8EEAA9143310583C56}"
+GH_REPO="${GH_REPO:-M1w234/yaprflow-mw}"
+
 read_marketing_version() {
     xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIGURATION" \
         -showBuildSettings 2>/dev/null \
-        | awk -F' = ' '/^\s*MARKETING_VERSION = /{print $2; exit}'
+        | awk -F' = ' '/^[[:space:]]*MARKETING_VERSION = /{print $2; exit}'
 }
 
-if [[ -z "$VERSION" ]]; then
-    VERSION="$(read_marketing_version)"
+PROJECT_VERSION="$(read_marketing_version)"
+if [[ -z "$PROJECT_VERSION" ]]; then
+    echo "error: could not read MARKETING_VERSION from the Xcode project" >&2
+    exit 1
 fi
 if [[ -z "$VERSION" ]]; then
-    echo "error: could not determine version (pass it as the first argument)" >&2
+    VERSION="$PROJECT_VERSION"
+fi
+if [[ "$VERSION" != "$PROJECT_VERSION" ]]; then
+    echo "error: requested release $VERSION, but MARKETING_VERSION is $PROJECT_VERSION" >&2
+    echo "Update the Xcode project version before creating the release." >&2
     exit 1
 fi
 
-DMG_NAME="$APP_NAME-$VERSION"
+DMG_NAME="$APP_NAME"
 DMG_PATH="$BUILD_DIR/$DMG_NAME.dmg"
 TEMP_DMG="$BUILD_DIR/$DMG_NAME.tmp.dmg"
 APP_ZIP="$BUILD_DIR/$APP_NAME-$VERSION.zip"
@@ -112,9 +123,6 @@ if [[ "${SKIP_NOTARIZE:-0}" == "1" ]]; then
     echo "==> SKIP_NOTARIZE=1 set; building unsigned/unnotarized DMG for local testing"
     NOTARIZE=false
 else
-    # Default to the keychain profile already used by scripts/notarize-dmg.sh.
-    NOTARY_PROFILE="${NOTARY_PROFILE:-notary-yaprflow}"
-
     if [[ -n "${NOTARY_PROFILE}" ]] && xcrun notarytool history --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1; then
         NOTARY_AUTH=(--keychain-profile "$NOTARY_PROFILE")
     elif [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
@@ -125,7 +133,7 @@ error: notarization credentials not set.
 Either:
   1. Create the keychain profile (one-time):
        xcrun notarytool store-credentials --apple-id you@example.com \\
-           --team-id GVXC5FQ2RP --password xxxx-xxxx-xxxx-xxxx notary-yaprflow
+           --team-id $APPLE_TEAM_ID --password xxxx-xxxx-xxxx-xxxx $NOTARY_PROFILE
   2. OR create .env with APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
   3. OR run with SKIP_NOTARIZE=1 for an unnotarized local build
 EOF
@@ -133,7 +141,17 @@ EOF
     fi
 fi
 
-CODESIGN_IDENTITY="${DEVELOPER_ID_APPLICATION:-Developer ID Application: Tim Moreton (GVXC5FQ2RP)}"
+if [[ "$NOTARIZE" == true ]] && \
+   ! security find-identity -v -p codesigning 2>/dev/null | grep -Fq "$CODESIGN_IDENTITY"; then
+    cat >&2 <<EOF
+error: Developer ID signing identity is not available:
+  $CODESIGN_IDENTITY
+
+Set DEVELOPER_ID_APPLICATION to the certificate name or SHA-1 fingerprint shown by:
+  security find-identity -v -p codesigning
+EOF
+    exit 1
+fi
 
 # ---- Notarization helpers ----------------------------------------------------
 # `notarytool submit --wait` intermittently crashes with `Bus error: 10` while
@@ -235,6 +253,8 @@ else
         -configuration "$CONFIGURATION" \
         -archivePath "$ARCHIVE_PATH" \
         -destination "generic/platform=macOS" \
+        ARCHS=arm64 \
+        DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
         archive
 
     # ---- Get a Developer-ID-signed .app -------------------------------------
@@ -249,9 +269,11 @@ else
     <key>method</key>
     <string>developer-id</string>
     <key>teamID</key>
-    <string>${APPLE_TEAM_ID:-GVXC5FQ2RP}</string>
+    <string>$APPLE_TEAM_ID</string>
     <key>signingStyle</key>
-    <string>automatic</string>
+    <string>manual</string>
+    <key>signingCertificate</key>
+    <string>$CODESIGN_IDENTITY</string>
     <key>destination</key>
     <string>export</string>
 </dict>
@@ -375,7 +397,7 @@ if [[ "$NOTARIZE" == true ]]; then
     xcrun stapler validate "$DMG_PATH"
 
     echo "==> Gatekeeper assessment"
-    spctl --assess --type open --context context:primary-signature --verbose "$DMG_PATH" || true
+    spctl --assess --type open --context context:primary-signature --verbose "$DMG_PATH"
 fi
 
 echo
@@ -399,15 +421,15 @@ if [[ "$PUBLISH" == true ]]; then
         git push origin "$TAG"
     fi
 
-    if gh release view "$TAG" >/dev/null 2>&1; then
+    if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
         echo "==> Release $TAG exists — replacing DMG asset"
-        gh release upload "$TAG" "$DMG_PATH" --clobber
+        gh release upload "$TAG" "$DMG_PATH" --clobber --repo "$GH_REPO"
         if [[ -n "$NOTES" ]]; then
-            gh release edit "$TAG" --notes "$NOTES"
+            gh release edit "$TAG" --notes "$NOTES" --repo "$GH_REPO"
         fi
     else
         echo "==> Creating GitHub release"
-        RELEASE_ARGS=("$TAG" "$DMG_PATH" --title "yaprflow $VERSION")
+        RELEASE_ARGS=("$TAG" "$DMG_PATH" --repo "$GH_REPO" --title "yaprflow $VERSION")
         if [[ -n "$NOTES" ]]; then
             RELEASE_ARGS+=(--notes "$NOTES")
         else

@@ -2,7 +2,7 @@ import CoreAudio
 import Foundation
 import OSLog
 
-private let log = Logger(subsystem: "com.tmoreton.yaprflow", category: "AudioDucking")
+private let log = Logger(subsystem: "com.teamwong.yaprflow", category: "AudioDucking")
 
 /// Mutes system output while dictating so music/video doesn't bleed into the
 /// mic (and the ASR doesn't transcribe your podcast). Wispr Flow calls this
