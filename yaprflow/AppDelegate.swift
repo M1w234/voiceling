@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
@@ -8,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var cleanupModeMenu: NSMenu?
     private var startSoundPickerMenu: NSMenu?
     private var stopSoundPickerMenu: NSMenu?
+    private var soundsMenuItem: NSMenuItem?
     private var statusIconCancellable: AnyCancellable?
     private var cleanupModeCancellable: AnyCancellable?
 
@@ -183,7 +185,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         let soundsItem = NSMenuItem(title: "Sound Effects", action: nil, keyEquivalent: "")
         soundsItem.image = NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: nil)
         soundsItem.submenu = buildSoundsSubmenu()
-        soundsItem.toolTip = "Toggle start/stop chimes and pick which system sounds to use."
+        soundsItem.toolTip = "Adjust volume, choose start/stop chimes, or import your own local sound."
+        self.soundsMenuItem = soundsItem
         menu.addItem(soundsItem)
 
         let advancedItem = NSMenuItem(title: "Advanced", action: nil, keyEquivalent: "")
@@ -362,6 +365,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if menuItem.action == #selector(resetSoundsToDefaults) {
             return AppState.shared.startSoundName != SoundEffect.defaultStartName
                 || AppState.shared.stopSoundName != SoundEffect.defaultStopName
+                || abs(AppState.shared.soundEffectsVolume - 1) > 0.001
         }
         return true
     }
@@ -439,10 +443,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     // MARK: - Sound Effects submenu
 
-    /// Builds the "Sound Effects" submenu: an Enabled toggle, two sound-picker
-    /// submenus (start / stop), and a reset action. Built once at launch and
-    /// kept alive for the app's lifetime — checkmark state is maintained
-    /// imperatively by the action handlers so we don't need to rebuild.
+    /// Builds the "Sound Effects" submenu: enablement, per-app volume,
+    /// start/stop pickers, local import management, and reset. It is rebuilt
+    /// after an import or removal so the new inventory appears immediately.
     private func buildSoundsSubmenu() -> NSMenu {
         let submenu = NSMenu()
 
@@ -454,6 +457,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         enabledItem.target = self
         enabledItem.state = AppState.shared.soundEffectsEnabled ? .on : .off
         submenu.addItem(enabledItem)
+
+        let volumeItem = NSMenuItem()
+        volumeItem.view = SoundVolumeMenuItemView()
+        volumeItem.toolTip = "Changes only Yaprflow's confirmation sounds, not system volume."
+        submenu.addItem(volumeItem)
 
         submenu.addItem(NSMenuItem.separator())
 
@@ -470,6 +478,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         submenu.addItem(stopParent)
 
         submenu.addItem(NSMenuItem.separator())
+
+        let imported = SoundEffect.importedSounds()
+        if !imported.isEmpty {
+            let removeParent = NSMenuItem(
+                title: "Remove Imported Sound",
+                action: nil,
+                keyEquivalent: ""
+            )
+            let removeMenu = NSMenu()
+            for option in imported {
+                let item = NSMenuItem(
+                    title: option.displayName,
+                    action: #selector(removeImportedSound(_:)),
+                    keyEquivalent: ""
+                )
+                item.target = self
+                item.representedObject = option.identifier
+                removeMenu.addItem(item)
+            }
+            removeParent.submenu = removeMenu
+            submenu.addItem(removeParent)
+        }
 
         let resetItem = NSMenuItem(
             title: "Reset to Defaults",
@@ -492,11 +522,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             : #selector(selectStopSound(_:))
 
         func addSound(_ name: String) {
-            let item = NSMenuItem(title: name, action: selector, keyEquivalent: "")
+            addSound(identifier: name, displayName: name)
+        }
+
+        func addSound(identifier: String, displayName: String) {
+            let item = NSMenuItem(title: displayName, action: selector, keyEquivalent: "")
             item.target = self
-            item.representedObject = name
-            item.state = (name == current) ? .on : .off
+            item.representedObject = identifier
+            item.state = (identifier == current) ? .on : .off
             menu.addItem(item)
+        }
+
+        let imported = SoundEffect.importedSounds()
+        if !imported.isEmpty {
+            menu.addItem(NSMenuItem.sectionHeader(title: "Imported"))
+            imported.forEach {
+                addSound(identifier: $0.identifier, displayName: $0.displayName)
+            }
+            menu.addItem(NSMenuItem.separator())
         }
 
         // Custom chimes bundled with the app (synthesized + imported) get
@@ -509,6 +552,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             menu.addItem(NSMenuItem.sectionHeader(title: "macOS"))
         }
         SoundEffect.availableSounds().forEach(addSound)
+
+        menu.addItem(NSMenuItem.separator())
+        let importItem = NSMenuItem(
+            title: "Import Custom Sound…",
+            action: forStart
+                ? #selector(importStartSound)
+                : #selector(importStopSound),
+            keyEquivalent: ""
+        )
+        importItem.target = self
+        importItem.toolTip = "Copies a local audio file into Yaprflow. The original file is unchanged."
+        menu.addItem(importItem)
+
         return menu
     }
 
@@ -536,8 +592,104 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     @objc private func resetSoundsToDefaults() {
         AppState.shared.startSoundName = SoundEffect.defaultStartName
         AppState.shared.stopSoundName = SoundEffect.defaultStopName
+        AppState.shared.soundEffectsVolume = 1
         refreshSoundCheckmarks(in: startSoundPickerMenu, current: SoundEffect.defaultStartName)
         refreshSoundCheckmarks(in: stopSoundPickerMenu, current: SoundEffect.defaultStopName)
+    }
+
+    @objc private func importStartSound() {
+        presentSoundImporter(forStart: true)
+    }
+
+    @objc private func importStopSound() {
+        presentSoundImporter(forStart: false)
+    }
+
+    private func presentSoundImporter(forStart: Bool) {
+        let panel = NSOpenPanel()
+        panel.title = forStart ? "Choose a Start Sound" : "Choose a Stop Sound"
+        panel.message = "Choose a local sound effect up to 30 seconds. Yaprflow keeps its own private copy."
+        panel.prompt = "Import"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.audio]
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { [weak self] response in
+            guard response == .OK, let source = panel.url else { return }
+            Task { @MainActor in
+                self?.finishSoundImport(from: source, forStart: forStart)
+            }
+        }
+    }
+
+    private func finishSoundImport(from source: URL, forStart: Bool) {
+        let didAccess = source.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess {
+                source.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        do {
+            let option = try SoundEffect.importSound(from: source)
+            if forStart {
+                AppState.shared.startSoundName = option.identifier
+            } else {
+                AppState.shared.stopSoundName = option.identifier
+            }
+            rebuildSoundsSubmenu()
+            SoundEffect.preview(option.identifier)
+        } catch {
+            showSoundAlert(
+                title: "Couldn't Import Sound",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    @objc private func removeImportedSound(_ sender: NSMenuItem) {
+        guard let identifier = sender.representedObject as? String else { return }
+        let displayName = SoundEffect.displayName(for: identifier)
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Remove “\(displayName)” from Yaprflow?"
+        alert.informativeText = "Yaprflow's private copy will be deleted. Your original audio file will not be changed."
+        alert.addButton(withTitle: "Remove")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        do {
+            try SoundEffect.removeImportedSound(identifier: identifier)
+            if AppState.shared.startSoundName == identifier {
+                AppState.shared.startSoundName = SoundEffect.defaultStartName
+            }
+            if AppState.shared.stopSoundName == identifier {
+                AppState.shared.stopSoundName = SoundEffect.defaultStopName
+            }
+            rebuildSoundsSubmenu()
+        } catch {
+            showSoundAlert(
+                title: "Couldn't Remove Sound",
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    private func rebuildSoundsSubmenu() {
+        soundsMenuItem?.submenu = buildSoundsSubmenu()
+    }
+
+    private func showSoundAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     private func refreshSoundCheckmarks(in menu: NSMenu?, current: String) {

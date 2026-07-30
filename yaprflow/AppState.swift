@@ -45,6 +45,7 @@ final class AppState: ObservableObject {
     private static let comparisonLogModeKey = "yaprflow.comparisonLogMode"
     private static let bothKeyboardSidesKey = "yaprflow.bothKeyboardSides"
     private static let soundEffectsEnabledKey = "yaprflow.soundEffectsEnabled"
+    private static let soundEffectsVolumeKey = "yaprflow.soundEffectsVolume"
     private static let startSoundNameKey = "yaprflow.startSoundName"
     private static let stopSoundNameKey = "yaprflow.stopSoundName"
     private static let lastTranscriptKey = "yaprflow.lastTranscript"
@@ -144,9 +145,20 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Name of the macOS system sound played at recording start. Resolved by
-    /// `NSSound(named:)`, so values must match a basename in
-    /// `/System/Library/Sounds/` (without the .aiff extension).
+    /// Per-chime playback volume. This changes only Yaprflow's confirmation
+    /// sounds; it never changes the Mac's system output volume.
+    @Published var soundEffectsVolume: Float {
+        didSet {
+            UserDefaults.standard.set(
+                min(max(soundEffectsVolume, 0), 1),
+                forKey: Self.soundEffectsVolumeKey
+            )
+        }
+    }
+
+    /// Identifier of the sound played at recording start. Legacy values are
+    /// macOS/bundled sound names; imported sounds use SoundEffect's private
+    /// identifier prefix so equal display names cannot collide.
     @Published var startSoundName: String {
         didSet {
             UserDefaults.standard.set(startSoundName, forKey: Self.startSoundNameKey)
@@ -230,10 +242,19 @@ final class AppState: ObservableObject {
         } else {
             self.soundEffectsEnabled = true
         }
-        self.startSoundName = UserDefaults.standard.string(forKey: Self.startSoundNameKey)
-            ?? SoundEffect.defaultStartName
-        self.stopSoundName = UserDefaults.standard.string(forKey: Self.stopSoundNameKey)
-            ?? SoundEffect.defaultStopName
+        if let stored = UserDefaults.standard.object(forKey: Self.soundEffectsVolumeKey) as? NSNumber {
+            self.soundEffectsVolume = min(max(stored.floatValue, 0), 1)
+        } else {
+            self.soundEffectsVolume = 1
+        }
+        self.startSoundName = SoundEffect.resolvedSelection(
+            UserDefaults.standard.string(forKey: Self.startSoundNameKey),
+            fallback: SoundEffect.defaultStartName
+        )
+        self.stopSoundName = SoundEffect.resolvedSelection(
+            UserDefaults.standard.string(forKey: Self.stopSoundNameKey),
+            fallback: SoundEffect.defaultStopName
+        )
         self.lastTranscript = UserDefaults.standard.string(forKey: Self.lastTranscriptKey) ?? ""
     }
 }

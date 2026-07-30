@@ -15,7 +15,7 @@ A personal fork of [tmoreton/yaprflow](https://github.com/tmoreton/yaprflow) wit
   for secure-input fields.
 - ⏯️ **Hold-to-talk OR tap-to-toggle** — pick whichever feel fits the hotkey. Hold-to-talk supports modifier chords; tap-to-toggle is one press to start, one to stop.
 - ⌨️ **F-key hotkeys** — F13–F19, arrow keys, Page/Home/End are all bindable. No more "must include a modifier" guard.
-- 🎵 **Start / stop chimes** — soft system sounds confirm the mic is open and closed. Togglable.
+- 🎵 **Personalized start / stop chimes** — adjust Yaprflow's volume, choose bundled or macOS sounds, or import a local WAV, AIFF, M4A, MP3, or CAF file.
 - 🪟 **Wispr-style overlay** — floating pill at the bottom-center of the screen with three audio-level bars that bounce as you speak.
 - 🔒 **100% local** — audio never leaves your Mac. No accounts, no telemetry.
 - ✍️ **Three cleanup levels** — Off preserves the transcript, Light performs

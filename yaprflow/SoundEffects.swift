@@ -14,6 +14,31 @@ enum SoundEffect {
     case start
     case stop
 
+    struct Option: Hashable {
+        let identifier: String
+        let displayName: String
+    }
+
+    enum ImportError: LocalizedError {
+        case fileTooLarge
+        case soundTooLong
+        case unreadableAudio
+        case invalidSelection
+
+        var errorDescription: String? {
+            switch self {
+            case .fileTooLarge:
+                return "Choose an audio file smaller than 25 MB."
+            case .soundTooLong:
+                return "Choose a sound effect that is 30 seconds or shorter."
+            case .unreadableAudio:
+                return "Yaprflow couldn't read that audio file. Try WAV, AIFF, M4A, MP3, or CAF."
+            case .invalidSelection:
+                return "That imported sound is no longer available."
+            }
+        }
+    }
+
     /// Defaults chosen for the feel they convey: a single short croak (Frog)
     /// to signal recording started, and a satisfying pop (Bottle) when it
     /// stops. Used by AppState on first launch and by "Reset to Defaults" in
@@ -49,7 +74,12 @@ enum SoundEffect {
         return canonicalSounds
     }
 
-    private nonisolated static let bundledExtensions: Set<String> = ["m4a", "aiff", "wav", "mp3"]
+    private nonisolated static let bundledExtensions: Set<String> = [
+        "aac", "aif", "aiff", "caf", "m4a", "mp3", "wav",
+    ]
+    private nonisolated static let importedPrefix = "imported:"
+    private nonisolated static let maximumImportedBytes: UInt64 = 25 * 1_024 * 1_024
+    private nonisolated static let maximumImportedDuration: TimeInterval = 30
 
     /// Directories that may hold app-bundled chimes. Xcode's synchronized
     /// folder groups can copy `yaprflow/Sounds/*` either flat into Resources
@@ -75,6 +105,94 @@ enum SoundEffect {
         return names.sorted()
     }
 
+    /// User-selected sounds are copied into the app container. That makes
+    /// playback reliable across launches without retaining a security-scoped
+    /// bookmark to the person's original file.
+    nonisolated static func importedSounds() -> [Option] {
+        guard let directory = try? importedSoundDirectory(create: false),
+              let entries = try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+              )
+        else {
+            return []
+        }
+
+        return entries
+            .filter {
+                bundledExtensions.contains($0.pathExtension.lowercased())
+                    && !$0.hasDirectoryPath
+            }
+            .map {
+                Option(
+                    identifier: importedPrefix + $0.lastPathComponent,
+                    displayName: $0.deletingPathExtension().lastPathComponent
+                )
+            }
+            .sorted {
+                $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+    }
+
+    nonisolated static func importSound(from source: URL) throws -> Option {
+        guard bundledExtensions.contains(source.pathExtension.lowercased()) else {
+            throw ImportError.unreadableAudio
+        }
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: source.path)
+        if let size = attributes[.size] as? NSNumber,
+           size.uint64Value > maximumImportedBytes {
+            throw ImportError.fileTooLarge
+        }
+
+        guard let sound = NSSound(contentsOf: source, byReference: false) else {
+            throw ImportError.unreadableAudio
+        }
+        if sound.duration.isFinite && sound.duration > maximumImportedDuration {
+            throw ImportError.soundTooLong
+        }
+
+        let directory = try importedSoundDirectory(create: true)
+        let destination = uniqueDestination(for: source, in: directory)
+        try FileManager.default.copyItem(at: source, to: destination)
+
+        guard NSSound(contentsOf: destination, byReference: true) != nil else {
+            try? FileManager.default.removeItem(at: destination)
+            throw ImportError.unreadableAudio
+        }
+
+        return Option(
+            identifier: importedPrefix + destination.lastPathComponent,
+            displayName: destination.deletingPathExtension().lastPathComponent
+        )
+    }
+
+    nonisolated static func removeImportedSound(identifier: String) throws {
+        guard let url = importedSoundURL(for: identifier),
+              FileManager.default.fileExists(atPath: url.path)
+        else {
+            throw ImportError.invalidSelection
+        }
+        try FileManager.default.removeItem(at: url)
+    }
+
+    nonisolated static func displayName(for identifier: String) -> String {
+        guard identifier.hasPrefix(importedPrefix) else { return identifier }
+        let filename = String(identifier.dropFirst(importedPrefix.count))
+        return URL(fileURLWithPath: filename)
+            .deletingPathExtension()
+            .lastPathComponent
+    }
+
+    nonisolated static func resolvedSelection(_ stored: String?, fallback: String) -> String {
+        guard let stored, !stored.isEmpty else { return fallback }
+        if stored.hasPrefix(importedPrefix) {
+            return importedSoundURL(for: stored) != nil ? stored : fallback
+        }
+        return stored
+    }
+
     private nonisolated static func bundledSoundURL(named name: String) -> URL? {
         let fm = FileManager.default
         for dir in bundledSoundDirs() {
@@ -84,6 +202,66 @@ enum SoundEffect {
             }
         }
         return nil
+    }
+
+    private nonisolated static func importedSoundDirectory(create: Bool) throws -> URL {
+        let appSupport = try FileManager.default.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let directory = appSupport
+            .appendingPathComponent("yaprflow", isDirectory: true)
+            .appendingPathComponent("Sounds", isDirectory: true)
+        if create {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+        }
+        return directory
+    }
+
+    private nonisolated static func importedSoundURL(for identifier: String) -> URL? {
+        guard identifier.hasPrefix(importedPrefix) else { return nil }
+        let filename = String(identifier.dropFirst(importedPrefix.count))
+        guard !filename.isEmpty,
+              URL(fileURLWithPath: filename).lastPathComponent == filename,
+              let directory = try? importedSoundDirectory(create: false)
+        else {
+            return nil
+        }
+        let url = directory.appendingPathComponent(filename, isDirectory: false)
+        guard url.deletingLastPathComponent().standardizedFileURL
+            == directory.standardizedFileURL
+        else {
+            return nil
+        }
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private nonisolated static func uniqueDestination(for source: URL, in directory: URL) -> URL {
+        let originalBase = source.deletingPathExtension().lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = originalBase.isEmpty ? "Custom Sound" : originalBase
+        let ext = source.pathExtension.lowercased()
+        let existingDisplayNames = Set(
+            importedSounds().map { $0.displayName.lowercased() }
+        )
+
+        var suffix = 1
+        while true {
+            let name = suffix == 1 ? base : "\(base) \(suffix)"
+            let candidate = directory
+                .appendingPathComponent(name, isDirectory: false)
+                .appendingPathExtension(ext)
+            if !existingDisplayNames.contains(name.lowercased()),
+               !FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+            suffix += 1
+        }
     }
 
     /// Strong reference to the currently-playing file-based sound. Unlike
@@ -114,10 +292,21 @@ enum SoundEffect {
     }
 
     private static func playByName(_ name: String) {
+        let volume = min(max(AppState.shared.soundEffectsVolume, 0), 1)
+
+        if let url = importedSoundURL(for: name),
+           let sound = NSSound(contentsOf: url, byReference: true) {
+            activeSound = sound
+            sound.volume = volume
+            sound.play()
+            return
+        }
+
         // Bundled custom chimes win over same-named system sounds.
         if let url = bundledSoundURL(named: name),
            let sound = NSSound(contentsOf: url, byReference: true) {
             activeSound = sound
+            sound.volume = volume
             sound.play()
             return
         }
@@ -125,6 +314,7 @@ enum SoundEffect {
             log.error("Sound \(name, privacy: .public) not found (bundle or system)")
             return
         }
+        sound.volume = volume
         sound.play()
     }
 }
