@@ -43,6 +43,7 @@ final class AppState: ObservableObject {
     private static let preserveClipboardModeKey = "yaprflow.preserveClipboardMode"
     private static let duckWhileRecordingKey = "yaprflow.duckWhileRecording"
     private static let comparisonLogModeKey = "yaprflow.comparisonLogMode"
+    private static let keyboardShortcutEnabledKey = "yaprflow.keyboardShortcutEnabled"
     private static let bothKeyboardSidesKey = "yaprflow.bothKeyboardSides"
     private static let soundEffectsEnabledKey = "yaprflow.soundEffectsEnabled"
     private static let soundEffectsVolumeKey = "yaprflow.soundEffectsVolume"
@@ -53,6 +54,19 @@ final class AppState: ObservableObject {
     @Published var status: TranscriptionStatus = .idle
     @Published var liveTranscript: String = ""
     @Published var hotkey: HotkeyConfig = HotkeyConfig.load() ?? .defaultHotkey
+    @Published var externalHotkey: ExternalHotkeyConfig =
+        ExternalHotkeyConfig.load() ?? .defaultConfig
+
+    /// Controls whether the saved primary keyboard shortcut is currently
+    /// registered. Pausing it never changes the saved keys or trigger mode.
+    @Published var keyboardShortcutEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(
+                keyboardShortcutEnabled,
+                forKey: Self.keyboardShortcutEnabledKey
+            )
+        }
+    }
 
     /// When `true` (default), show live partials during dictation at the cost
     /// of slightly lower accuracy. When `false`, record silently and transcribe
@@ -192,6 +206,13 @@ final class AppState: ObservableObject {
     @Published var lastOriginalTranscript: String = ""
 
     private init() {
+        if let stored = UserDefaults.standard.object(
+            forKey: Self.keyboardShortcutEnabledKey
+        ) as? Bool {
+            self.keyboardShortcutEnabled = stored
+        } else {
+            self.keyboardShortcutEnabled = true
+        }
         if let stored = UserDefaults.standard.object(forKey: Self.streamingModeKey) as? Bool {
             self.streamingMode = stored
         } else {
@@ -256,9 +277,16 @@ final class AppState: ObservableObject {
             fallback: SoundEffect.defaultStopName
         )
         self.lastTranscript = UserDefaults.standard.string(forKey: Self.lastTranscriptKey) ?? ""
+
+        // Never restore a persisted state with both user-facing trigger paths
+        // disabled. The keyboard shortcut is the safe fallback.
+        if !externalHotkey.enabled && !keyboardShortcutEnabled {
+            keyboardShortcutEnabled = true
+        }
     }
 }
 
 extension Notification.Name {
     static let yaprflowHotkeyChanged = Notification.Name("yaprflow.hotkey.changed")
+    static let yaprflowExternalHotkeyChanged = Notification.Name("yaprflow.externalHotkey.changed")
 }

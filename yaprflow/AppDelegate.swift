@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .sink { [weak self] _ in self?.refreshCleanupModeCheckmarks() }
         _ = NotchOverlayWindowController.shared
         registerHotkey()
+        registerExternalHotkey()
         registerHistoryHotkey()
 
         // Eagerly instantiate the history store so its Combine subscription
@@ -52,6 +53,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         ) { _ in
             MainActor.assumeIsolated {
                 self.registerHotkey()
+                // A changed primary shortcut can create or remove a conflict
+                // with the independent external shortcut.
+                self.registerExternalHotkey()
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .yaprflowExternalHotkeyChanged,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                self.registerExternalHotkey()
             }
         }
     }
@@ -59,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     func applicationWillTerminate(_ notification: Notification) {
         GlobalHotkey.shared.unregister()
         ModifierOnlyHotkey.shared.unregister()
+        ExternalHotkey.shared.unregister()
         HistoryHotkey.shared.unregister()
         CancelHotkey.shared.unregister()
         // Never leave the system muted behind us if we quit mid-recording.
@@ -144,6 +158,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         )
         bothSidesItem.toolTip = "For modifier-only shortcuts (e.g. ⌘⇧): off = only the side of the keyboard you first used it on triggers dictation, so left-side ⌘⇧ shortcuts don't collide. On = either side works. No effect on key-based shortcuts."
         menu.addItem(bothSidesItem)
+
+        let externalButtonItem = NSMenuItem(
+            title: "External Button",
+            action: nil,
+            keyEquivalent: ""
+        )
+        externalButtonItem.image = NSImage(
+            systemSymbolName: "computermouse",
+            accessibilityDescription: nil
+        )
+        externalButtonItem.submenu = buildExternalButtonSubmenu()
+        externalButtonItem.toolTip = "Keep your main keyboard shortcut and add an independent shortcut for Logitech Options+ or other button-remapping software."
+        menu.addItem(externalButtonItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -285,6 +312,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             .sink { [weak self] status in
                 self?.updateStatusIcon(for: status)
             }
+    }
+
+    private func buildExternalButtonSubmenu() -> NSMenu {
+        let submenu = NSMenu()
+
+        let enabledItem = NSMenuItem()
+        enabledItem.view = ToggleMenuItemView(
+            symbolName: "computermouse",
+            title: "Enabled",
+            publisher: AppState.shared.$externalHotkey
+                .map(\.enabled)
+                .removeDuplicates()
+                .eraseToAnyPublisher(),
+            get: { AppState.shared.externalHotkey.enabled },
+            set: { newValue in
+                var config = AppState.shared.externalHotkey
+                config.enabled = newValue
+                AppState.shared.externalHotkey = config
+                config.save()
+                NotificationCenter.default.post(
+                    name: .yaprflowExternalHotkeyChanged,
+                    object: nil
+                )
+            }
+        )
+        enabledItem.toolTip = "Turn on the independent shortcut used by your programmable mouse. Your main keyboard shortcut is unchanged."
+        submenu.addItem(enabledItem)
+
+        let shortcutItem = NSMenuItem()
+        shortcutItem.view = ExternalHotkeyShortcutMenuItemView()
+        shortcutItem.toolTip = "Assign this same keystroke to a mouse button in Logitech Options+. Press a new shortcut twice here to change it."
+        submenu.addItem(shortcutItem)
+
+        let triggerItem = NSMenuItem()
+        triggerItem.view = ExternalHotkeyModeMenuItemView()
+        triggerItem.toolTip = "Tap to Toggle is most reliable with remapping software. Hold to Talk requires the software to preserve key-down and key-up events."
+        submenu.addItem(triggerItem)
+
+        let keyboardItem = NSMenuItem()
+        keyboardItem.view = KeyboardShortcutActivationMenuItemView()
+        keyboardItem.toolTip = "Pause the saved keyboard shortcut while using the external button. Its keys and trigger behavior remain saved."
+        submenu.addItem(keyboardItem)
+
+        return submenu
     }
 
     private func updateStatusIcon(for status: TranscriptionStatus) {
@@ -702,6 +773,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     private func registerHotkey() {
+        guard AppState.shared.keyboardShortcutEnabled else {
+            GlobalHotkey.shared.unregister()
+            ModifierOnlyHotkey.shared.unregister()
+            return
+        }
+
         let config = AppState.shared.hotkey
 
         // Exactly one backend active at a time.
@@ -719,6 +796,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             wireHotkeyCallbacks(for: config.mode)
             GlobalHotkey.shared.register(keyCode: config.keyCode, modifiers: config.modifiers)
         }
+    }
+
+    private func registerExternalHotkey() {
+        let config = AppState.shared.externalHotkey
+        guard config.enabled else {
+            ExternalHotkey.shared.unregister()
+            restoreKeyboardShortcutIfNeeded()
+            return
+        }
+
+        // Carbon cannot register the same key combination twice. Keep the
+        // main shortcut authoritative if both settings ever converge.
+        guard !config.conflicts(with: AppState.shared.hotkey) else {
+            ExternalHotkey.shared.unregister()
+            restoreKeyboardShortcutIfNeeded()
+            return
+        }
+
+        switch config.mode {
+        case .tapToToggle:
+            ExternalHotkey.onPressed = {
+                Task { @MainActor in
+                    TranscriptionController.shared.toggle()
+                }
+            }
+            ExternalHotkey.onReleased = nil
+        case .holdToTalk:
+            ExternalHotkey.onPressed = {
+                Task { @MainActor in
+                    TranscriptionController.shared.setActive(true)
+                }
+            }
+            ExternalHotkey.onReleased = {
+                Task { @MainActor in
+                    TranscriptionController.shared.setActive(false)
+                }
+            }
+        }
+
+        let registered = ExternalHotkey.shared.register(
+            keyCode: config.keyCode,
+            modifiers: config.modifiers
+        )
+        if !registered {
+            restoreKeyboardShortcutIfNeeded()
+        }
+    }
+
+    /// The primary shortcut is the fail-safe: if the external path disappears
+    /// while it is paused, restore it without changing its saved configuration.
+    private func restoreKeyboardShortcutIfNeeded() {
+        guard !AppState.shared.keyboardShortcutEnabled else { return }
+        AppState.shared.keyboardShortcutEnabled = true
+        registerHotkey()
+        NotificationCenter.default.post(name: .yaprflowHotkeyChanged, object: nil)
     }
 
     /// Modifier-only bindings always support both hold-to-talk and

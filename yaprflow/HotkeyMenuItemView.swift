@@ -83,6 +83,12 @@ final class HotkeyMenuItemView: MenuRowView {
         }
     }
 
+    override func applyStateColor() {
+        stateField.textColor = AppState.shared.keyboardShortcutEnabled
+            ? .secondaryLabelColor
+            : .tertiaryLabelColor
+    }
+
     /// Blue "Press a shortcut…" while recording (unless the row is also
     /// hovered, in which case the base's white-on-accent wins).
     override func titleColor(enabled: Bool, highlighted: Bool) -> NSColor {

@@ -93,7 +93,7 @@ struct HotkeyConfig: Codable, Equatable {
         return try? JSONDecoder().decode(HotkeyConfig.self, from: data)
     }
 
-    var displayString: String {
+    var shortcutDisplayString: String {
         var s = ""
         if modifiers & Self.fnBit != 0         { s += "🌐" }
         if modifiers & UInt32(controlKey) != 0 { s += "⌃" }
@@ -101,6 +101,11 @@ struct HotkeyConfig: Codable, Equatable {
         if modifiers & UInt32(shiftKey) != 0   { s += "⇧" }
         if modifiers & UInt32(cmdKey) != 0     { s += "⌘" }
         if !isModifierOnly { s += Self.name(for: keyCode) }
+        return s
+    }
+
+    var displayString: String {
+        var s = shortcutDisplayString
         // Modifier-only bindings always support both hold and double-tap-to-lock
         // simultaneously, so the per-mode "(hold)" suffix doesn't apply.
         if !isModifierOnly && mode == .holdToTalk { s += "  (hold)" }
@@ -192,5 +197,49 @@ struct HotkeyConfig: Codable, Equatable {
         case kVK_ANSI_Grave: return "`"
         default: return "Key\(code)"
         }
+    }
+}
+
+/// Optional second dictation shortcut intended for mouse/remapping software.
+/// It deliberately accepts only a key-based shortcut: modifier-only triggers
+/// use side-aware physical-key state that synthetic Logitech events may not
+/// preserve reliably.
+struct ExternalHotkeyConfig: Codable, Equatable {
+    var enabled: Bool
+    var keyCode: UInt32
+    var modifiers: UInt32
+    var mode: HotkeyMode
+
+    static let defaultConfig = ExternalHotkeyConfig(
+        enabled: false,
+        keyCode: UInt32(kVK_Space),
+        modifiers: UInt32(controlKey | optionKey | cmdKey),
+        mode: .tapToToggle
+    )
+
+    private static let defaultsKey = "yaprflow.externalHotkey.v1"
+
+    var hotkey: HotkeyConfig {
+        HotkeyConfig(keyCode: keyCode, modifiers: modifiers, mode: mode)
+    }
+
+    var shortcutDisplayString: String {
+        hotkey.shortcutDisplayString
+    }
+
+    func conflicts(with primary: HotkeyConfig) -> Bool {
+        !primary.isModifierOnly
+            && primary.keyCode == keyCode
+            && primary.modifiers == modifiers
+    }
+
+    func save() {
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+    }
+
+    static func load() -> ExternalHotkeyConfig? {
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey) else { return nil }
+        return try? JSONDecoder().decode(ExternalHotkeyConfig.self, from: data)
     }
 }

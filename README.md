@@ -14,6 +14,9 @@ A personal fork of [tmoreton/yaprflow](https://github.com/tmoreton/yaprflow) wit
   type into a different window if you switch apps mid-recording) and disabled
   for secure-input fields.
 - ⏯️ **Hold-to-talk OR tap-to-toggle** — pick whichever feel fits the hotkey. Hold-to-talk supports modifier chords; tap-to-toggle is one press to start, one to stop.
+- 🖱️ **Independent external-button shortcut** — keep your keyboard shortcut and
+  add a second key-based trigger for Logitech Options+ or other mouse-remapping
+  software, with its own tap-to-toggle or hold-to-talk mode.
 - ⌨️ **F-key hotkeys** — F13–F19, arrow keys, Page/Home/End are all bindable. No more "must include a modifier" guard.
 - 🎵 **Personalized start / stop chimes** — adjust Yaprflow's volume, choose bundled or macOS sounds, or import a local WAV, AIFF, M4A, MP3, or CAF file.
 - 🪟 **Wispr-style overlay** — floating pill at the bottom-center of the screen with three audio-level bars that bounce as you speak.
@@ -64,6 +67,25 @@ tccutil reset Accessibility com.teamwong.yaprflow
 ```
 
 Then click **Automatic Insertion** in the menu again to re-prompt.
+
+## Using a Programmable Mouse Button
+
+1. Click the waveform icon → **External Button**.
+2. Leave the external shortcut at its default, `⌃⌥⌘Space`, or record a new
+   key-based shortcut twice.
+3. Choose **Tap to Toggle** or **Hold to Talk**, then turn **Enabled** on.
+4. In Logitech Options+ (or your mouse software), assign the same keystroke to
+   the mouse button.
+5. If another dictation app should keep using your main keyboard shortcut, set
+   **Keyboard Shortcut** to **Paused** in the External Button submenu.
+
+This second trigger is independent. Enabling, disabling, or changing it does
+not replace the saved main Yaprflow keyboard shortcut. Pausing that shortcut
+only stops listening for it; its keys and trigger mode remain saved. Turning
+the external button off—or failing to register it—automatically restores the
+keyboard shortcut so Yaprflow is never left without a trigger. Tap to Toggle
+is the most compatible option; Hold to Talk requires the remapping software to
+preserve both key-down and key-up events.
 
 ## What's deliberately different from upstream
 

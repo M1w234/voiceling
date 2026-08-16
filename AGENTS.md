@@ -59,6 +59,7 @@ open /Applications/yaprflow.app
 | `AppDelegate.swift` | `wireHotkeyCallbacks(for:)` dispatches based on `config.mode`. Re-wires on `yaprflowHotkeyChanged`. |
 | `HotkeyMenuItemView.swift` | Removed "must have a modifier" guard so picker accepts F-keys, Space, etc. Mode preserved when re-recording. |
 | `HotkeyModeMenuItemView.swift` (new) | Toggle row in menu: "Tap to Toggle" ↔ "Hold to Talk". |
+| `ExternalHotkey.swift` / `ExternalHotkeyMenuItemView.swift` | Optional independent key-based trigger for programmable mice, with separate enable, shortcut, trigger-mode, and preserved primary-shortcut pause controls. |
 | `ModifierOnlyHotkey.swift` | Side-aware modifier-only hold-to-talk plus double-tap-to-lock, with false-trigger rejection, Accessibility retry, and a 10-minute safety stop. |
 | `Vocabulary.swift` | Deterministic personal-vocabulary replacements and built-in proper-noun casing. |
 | `TextInsertion.swift` / history files | Clipboard-preserving insertion, dictation history, and guarded delivery to the original target app. |
@@ -75,6 +76,9 @@ when changing them:
 - Keep the max recording duration and Esc/on-screen cancel fallbacks.
 - Do not allow a single standard modifier as the trigger. Globe/Fn is the
   deliberate exception.
+- Never leave both user-facing trigger paths disabled. If the external shortcut
+  is turned off, conflicts, or fails registration while the primary shortcut is
+  paused, reactivate the saved primary shortcut automatically.
 
 ## Constraints / Gotchas
 
