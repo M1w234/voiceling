@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         // complete ASR and VAD models; the loader retains a network fallback
         // for older or incomplete app bundles.
         TranscriptionController.shared.preload()
+        RemoteControlClient.shared.start()
 
         // Polish mode uses the model directly. Shadow Comparison also queues
         // a no-context Polish candidate after each recording, so pre-download
@@ -71,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        RemoteControlClient.shared.stop()
         GlobalHotkey.shared.unregister()
         ModifierOnlyHotkey.shared.unregister()
         ExternalHotkey.shared.unregister()
@@ -136,6 +138,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         }
 
         let menu = NSMenu()
+
+        // Keep recovery one click away, ahead of the settings. A native item
+        // also supports keyboard navigation and sizes to the full title.
+        let copyItem = NSMenuItem(
+            title: "Copy Most Recent Transcript",
+            action: #selector(copyTranscript),
+            keyEquivalent: ""
+        )
+        copyItem.target = self
+        copyItem.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: nil)
+        copyItem.toolTip = "Copy your latest dictation so you can paste it again."
+        menu.addItem(copyItem)
+        menu.addItem(NSMenuItem.separator())
 
         let shortcutItem = NSMenuItem()
         shortcutItem.view = HotkeyMenuItemView()
@@ -233,21 +248,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         menu.addItem(launchAtLoginItem)
 
         menu.addItem(NSMenuItem.separator())
-
-        // Copy text: original first, then corrected if grammar mode was on.
-        // Custom view so the icon lines up with Shortcut/Streaming/Grammar above.
-        let copyItem = NSMenuItem()
-        copyItem.view = IconActionMenuItemView(
-            symbolName: "doc.on.clipboard",
-            title: "Copy Transcript",
-            target: self,
-            action: #selector(copyTranscript),
-            isEnabled: {
-                !AppState.shared.lastTranscript.isEmpty
-                    || !AppState.shared.lastOriginalTranscript.isEmpty
-            }
-        )
-        menu.addItem(copyItem)
 
         // Summarize on demand
         let summarizeItem = NSMenuItem()

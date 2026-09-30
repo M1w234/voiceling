@@ -88,6 +88,16 @@ final class TranscriptionController {
     /// suppressed for this session (yaprflow was frontmost, or capture failed).
     private var sessionFrontmostPID: pid_t?
 
+    private struct RemoteSubmitContext {
+        let receipt: RemoteSubmitReceipt
+        let expiresAt: Date
+    }
+    /// Short-lived proof that the latest transcript was inserted into a stable
+    /// accessible field. It contains no transcript and is consumed after one
+    /// Return.
+    private var remoteSubmitContext: RemoteSubmitContext?
+    private let remoteSubmitLifetime: TimeInterval = 30
+
     /// Off-main capture of text-near-cursor for the grammar polish. Fires in
     /// start(), result is consumed in stop()'s grammar Task. The store never
     /// blocks the polish path; missing context just means the grammar call
@@ -149,6 +159,17 @@ final class TranscriptionController {
 
     var isRecording: Bool { isActive }
 
+    var canRemoteSubmit: Bool {
+        guard let context = remoteSubmitContext,
+              Date() < context.expiresAt else {
+            if let context = remoteSubmitContext, Date() >= context.expiresAt {
+                remoteSubmitContext = nil
+            }
+            return false
+        }
+        return true
+    }
+
     func toggle() {
         setActive(!desiredActive)
     }
@@ -157,9 +178,19 @@ final class TranscriptionController {
     /// audio and any partial transcript, touch neither clipboard nor target
     /// app. Bound to Esc while recording.
     func cancel() {
-        guard isActive else { return }
+        if !isActive {
+            // A remote cancel can arrive while microphone permission or model
+            // warmup is still suspended. Clearing desiredActive is enough for
+            // start()'s post-await race guard to abandon that pending start.
+            guard isStarting else { return }
+            desiredActive = false
+            remoteSubmitContext = nil
+            state.status = .idle
+            return
+        }
         let cancelledSessionID = currentSessionID
         desiredActive = false
+        remoteSubmitContext = nil
         isActive = false
         maxDurationTask?.cancel()
         CancelHotkey.shared.unregister()
@@ -213,6 +244,7 @@ final class TranscriptionController {
         updateStatus: Bool = true
     ) {
         ComparisonLogger.shared.recordDelivered(sessionID: sessionID, text: text)
+        remoteSubmitContext = nil
         if shadowComparisonEnabled {
             if updateStatus { state.status = .captured }
             log.info("Shadow comparison captured transcript without delivery")
@@ -261,10 +293,33 @@ final class TranscriptionController {
         guard let result = TextInsertion.insertWithResult(text, intoPID: target) else {
             return false
         }
+        if let receipt = result.submitReceipt {
+            remoteSubmitContext = RemoteSubmitContext(
+                receipt: receipt,
+                expiresAt: Date().addingTimeInterval(remoteSubmitLifetime)
+            )
+        }
         if state.learnFromCorrections, let receipt = result.receipt {
             CorrectionLearningMonitor.shared.begin(receipt)
         }
         return true
+    }
+
+    /// One-shot Return for the round controller. The field receipt, frontmost
+    /// PID, secure-input state and thirty-second lifetime all have to agree.
+    @discardableResult
+    func submitLastInsertion() -> Bool {
+        guard canRemoteSubmit, let context = remoteSubmitContext else {
+            remoteSubmitContext = nil
+            log.info("Remote submit refused: no current verified insertion")
+            return false
+        }
+        remoteSubmitContext = nil
+        let sent = TextInsertion.submitReturnIfStillFocused(context.receipt)
+        if sent {
+            state.status = .idle
+        }
+        return sent
     }
 
     /// Drive recording from desired state. Safe to call rapidly from push-to-talk:
@@ -322,6 +377,7 @@ final class TranscriptionController {
         guard !isActive, !isStarting else { return }
         // A new dictation ends the previous insertion's correction window.
         CorrectionLearningMonitor.shared.cancel()
+        remoteSubmitContext = nil
         isStarting = true
         defer { isStarting = false }
 

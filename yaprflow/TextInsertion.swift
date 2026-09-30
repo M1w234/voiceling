@@ -18,8 +18,21 @@ struct TextInsertionReceipt {
     let suffixAnchor: String
 }
 
+/// Minimal proof needed for a one-shot remote Return. Unlike the richer
+/// correction-learning receipt above, this works for Electron/web fields that
+/// expose a stable focused AX element but not text ranges or character counts.
+/// It deliberately contains no transcript or cursor contents.
+struct RemoteSubmitReceipt {
+    let pid: pid_t
+    let element: AXUIElement
+}
+
 struct TextInsertionResult {
+    /// Present only when the target exposes enough text-range metadata for
+    /// correction learning.
     let receipt: TextInsertionReceipt?
+    /// Present when insertion began and ended in the same focused AX element.
+    let submitReceipt: RemoteSubmitReceipt?
 }
 
 /// Inserts text into the focused field of another app WITHOUT touching the
@@ -50,20 +63,80 @@ enum TextInsertion {
         let axResult = axInsert(text, pid: pid)
         if axResult.succeeded {
             log.info("Inserted \(text.count, privacy: .public) chars via AX")
-            return TextInsertionResult(receipt: axResult.receipt)
+            return TextInsertionResult(
+                receipt: axResult.receipt,
+                submitReceipt: axResult.submitReceipt
+            )
         }
+        let focusedBeforeTyping = focusedElement(pid: pid)
         if typeUnicode(text) {
             log.info("Inserted \(text.count, privacy: .public) chars via synthetic typing")
-            return TextInsertionResult(receipt: nil)
+            let submitReceipt: RemoteSubmitReceipt?
+            if let focusedBeforeTyping,
+               NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+               let focusedAfterTyping = focusedElement(pid: pid),
+               CFEqual(focusedBeforeTyping, focusedAfterTyping) {
+                submitReceipt = RemoteSubmitReceipt(
+                    pid: pid,
+                    element: focusedBeforeTyping
+                )
+            } else {
+                submitReceipt = nil
+                log.info("Remote submit unavailable: typing target did not remain focused")
+            }
+            return TextInsertionResult(receipt: nil, submitReceipt: submitReceipt)
         }
         log.info("Direct insertion failed — caller should fall back to clipboard")
         return nil
     }
 
+    /// Press Return only when the exact AX field that accepted the most recent
+    /// direct insertion is still focused in the same frontmost application.
+    /// Both AX and synthetic-typing deliveries qualify only when that focused
+    /// element remained stable across the insertion.
+    static func submitReturnIfStillFocused(_ receipt: RemoteSubmitReceipt) -> Bool {
+        guard AutoPaste.hasAccessibility,
+              !AutoPaste.isSecureInputEnabled,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == receipt.pid,
+              let focused = focusedElement(pid: receipt.pid),
+              CFEqual(focused, receipt.element),
+              let source = CGEventSource(stateID: .privateState),
+              let down = CGEvent(
+                keyboardEventSource: source, virtualKey: 0x24, keyDown: true),
+              let up = CGEvent(
+                keyboardEventSource: source, virtualKey: 0x24, keyDown: false)
+        else {
+            log.info("Remote submit refused: insertion target is no longer focused")
+            return false
+        }
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+        log.info("Remote submit sent Return to verified insertion target")
+        return true
+    }
+
+    private static func focusedElement(pid: pid_t) -> AXUIElement? {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.3)
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            app, kAXFocusedUIElementAttribute as CFString, &focusedRef
+        ) == .success,
+              let ref = focusedRef,
+              CFGetTypeID(ref) == AXUIElementGetTypeID() else {
+            return nil
+        }
+        return (ref as! AXUIElement)
+    }
+
     private static func axInsert(
         _ text: String,
         pid: pid_t
-    ) -> (succeeded: Bool, receipt: TextInsertionReceipt?) {
+    ) -> (
+        succeeded: Bool,
+        receipt: TextInsertionReceipt?,
+        submitReceipt: RemoteSubmitReceipt?
+    ) {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.3)
 
@@ -73,7 +146,7 @@ enum TextInsertion {
         ) == .success,
               let ref = focusedRef,
               CFGetTypeID(ref) == AXUIElementGetTypeID() else {
-            return (false, nil)
+            return (false, nil, nil)
         }
         let element = ref as! AXUIElement
         AXUIElementSetMessagingTimeout(element, 0.3)
@@ -82,14 +155,18 @@ enum TextInsertion {
         guard AXUIElementIsAttributeSettable(
             element, kAXSelectedTextAttribute as CFString, &settable
         ) == .success, settable.boolValue else {
-            return (false, nil)
+            return (false, nil, nil)
         }
 
         let receipt = makeReceipt(text: text, pid: pid, element: element)
         let succeeded = AXUIElementSetAttributeValue(
             element, kAXSelectedTextAttribute as CFString, text as CFString
         ) == .success
-        return (succeeded, succeeded ? receipt : nil)
+        return (
+            succeeded,
+            succeeded ? receipt : nil,
+            succeeded ? RemoteSubmitReceipt(pid: pid, element: element) : nil
+        )
     }
 
     private static func makeReceipt(
