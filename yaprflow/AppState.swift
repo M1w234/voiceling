@@ -79,6 +79,7 @@ final class AppState: ObservableObject {
     private static let startSoundNameKey = "yaprflow.startSoundName"
     private static let stopSoundNameKey = "yaprflow.stopSoundName"
     private static let lastTranscriptKey = "yaprflow.lastTranscript"
+    private static let desklingRemoteEnabledKey = "yaprflow.desklingRemoteEnabled"
 
     @Published var status: TranscriptionStatus = .idle
     @Published var liveTranscript: String = ""
@@ -262,6 +263,15 @@ final class AppState: ObservableObject {
     /// is off or hasn't run yet.
     @Published var lastOriginalTranscript: String = ""
 
+    /// When `true` (default), poll the local bridge so a Deskling desk display
+    /// can start and stop dictation. Turning it off only stops polling; it
+    /// never changes a recording already in progress.
+    @Published var desklingRemoteEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(desklingRemoteEnabled, forKey: Self.desklingRemoteEnabledKey)
+        }
+    }
+
     private init() {
         if let stored = UserDefaults.standard.object(
             forKey: Self.keyboardShortcutEnabledKey
@@ -345,6 +355,11 @@ final class AppState: ObservableObject {
             fallback: SoundEffect.defaultStopName
         )
         self.lastTranscript = UserDefaults.standard.string(forKey: Self.lastTranscriptKey) ?? ""
+        if let stored = UserDefaults.standard.object(forKey: Self.desklingRemoteEnabledKey) as? Bool {
+            self.desklingRemoteEnabled = stored
+        } else {
+            self.desklingRemoteEnabled = true
+        }
 
         // Never restore a persisted state with both user-facing trigger paths
         // disabled. The keyboard shortcut is the safe fallback.

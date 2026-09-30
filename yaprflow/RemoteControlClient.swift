@@ -1,26 +1,33 @@
+import Combine
 import Foundation
 import OSLog
 
 private let remoteLog = Logger(
     subsystem: "com.teamwong.yaprflow", category: "RoundRemote")
 
-/// Outbound-only localhost client for the VibePulse round controller.
+/// Outbound-only localhost client for the Deskling desk display.
 /// It publishes coarse state and receives a five-command vocabulary. Audio,
 /// transcripts, app names and focused-field details never leave this process.
 @MainActor
-final class RemoteControlClient {
+final class RemoteControlClient: ObservableObject {
     static let shared = RemoteControlClient()
 
+    /// True while the bridge has accepted this client's registration and its
+    /// status publishes are succeeding. Drives the menu's Deskling status row.
+    @Published private(set) var isConnected = false
+
     private let baseURL = URL(string: "http://127.0.0.1:8737")!
-    private let clientID = UUID().uuidString
+    private var clientID = UUID().uuidString
     private var loopTask: Task<Void, Never>?
-    private var registered = false
     private var lastAcknowledgedSequence = 0
 
     private init() {}
 
     func start() {
         guard loopTask == nil else { return }
+        // A fresh token makes the bridge drop commands queued before the
+        // user turned Deskling off, so re-enabling cannot replay them.
+        clientID = UUID().uuidString
         loopTask = Task { @MainActor [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
@@ -30,28 +37,36 @@ final class RemoteControlClient {
         }
     }
 
+    /// Stops polling only. A recording the desk display started keeps going
+    /// and ends through the normal shortcuts.
     func stop() {
         loopTask?.cancel()
         loopTask = nil
-        registered = false
+        isConnected = false
     }
 
     private func cycle() async {
-        if !registered {
-            registered = await post(
+        // stop() can land while a request is in flight. A cancelled loop must
+        // not revive the connection state or execute a late command.
+        if !isConnected {
+            let accepted = await post(
                 path: "/api/yaprflow/client", body: ["client": clientID]) != nil
-            if !registered { return }
-            remoteLog.info("Round controller bridge connected")
+            guard accepted, !Task.isCancelled else { return }
+            isConnected = true
+            remoteLog.info("Deskling bridge connected")
         }
 
-        guard await publishStatus() else {
-            registered = false
+        let published = await publishStatus()
+        guard !Task.isCancelled else { return }
+        guard published else {
+            isConnected = false
             return
         }
         guard let response = await get(
             path: "/api/yaprflow/command",
             query: ["client": clientID,
                     "after": String(lastAcknowledgedSequence)]),
+              !Task.isCancelled,
               let command = response["command"] as? [String: Any],
               let sequence = command["seq"] as? Int,
               let name = command["command"] as? String,
@@ -74,7 +89,7 @@ final class RemoteControlClient {
         case "cancel": controller.cancel()
         case "submit": controller.submitLastInsertion()
         default:
-            remoteLog.error("Round controller sent an unsupported command")
+            remoteLog.error("Deskling sent an unsupported command")
         }
     }
 

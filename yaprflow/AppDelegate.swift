@@ -34,7 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         // complete ASR and VAD models; the loader retains a network fallback
         // for older or incomplete app bundles.
         TranscriptionController.shared.preload()
-        RemoteControlClient.shared.start()
+        applyDesklingRemoteSetting()
 
         // Polish mode uses the model directly. Shadow Comparison also queues
         // a no-context Polish candidate after each recording, so pre-download
@@ -188,6 +188,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         externalButtonItem.submenu = buildExternalButtonSubmenu()
         externalButtonItem.toolTip = "Keep your main keyboard shortcut and add an independent shortcut for Logitech Options+ or other button-remapping software."
         menu.addItem(externalButtonItem)
+
+        let desklingItem = NSMenuItem(title: "Deskling", action: nil, keyEquivalent: "")
+        desklingItem.image = NSImage(
+            systemSymbolName: "dot.radiowaves.left.and.right",
+            accessibilityDescription: nil
+        )
+        desklingItem.submenu = buildDesklingSubmenu()
+        desklingItem.toolTip = "Let your Deskling desk display start and stop dictation."
+        menu.addItem(desklingItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -357,6 +366,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         submenu.addItem(keyboardItem)
 
         return submenu
+    }
+
+    private func buildDesklingSubmenu() -> NSMenu {
+        let submenu = NSMenu()
+
+        let enabledItem = NSMenuItem()
+        enabledItem.view = ToggleMenuItemView(
+            symbolName: "dot.radiowaves.left.and.right",
+            title: "Use Deskling Remote",
+            publisher: AppState.shared.$desklingRemoteEnabled.eraseToAnyPublisher(),
+            get: { AppState.shared.desklingRemoteEnabled },
+            set: { [weak self] newValue in
+                AppState.shared.desklingRemoteEnabled = newValue
+                self?.applyDesklingRemoteSetting()
+            }
+        )
+        enabledItem.toolTip = "Poll the local Deskling service so your desk display can start, stop and submit dictation. Turning this off never interrupts a recording in progress."
+        submenu.addItem(enabledItem)
+
+        let connectionItem = NSMenuItem()
+        connectionItem.view = DesklingStatusMenuItemView()
+        connectionItem.toolTip = "Connected once the Deskling service on this Mac has accepted Yaprflow."
+        submenu.addItem(connectionItem)
+
+        return submenu
+    }
+
+    /// Polling is the only thing this setting controls. Turning it off leaves
+    /// any recording the desk display started running; the normal shortcuts
+    /// still stop it.
+    private func applyDesklingRemoteSetting() {
+        if AppState.shared.desklingRemoteEnabled {
+            RemoteControlClient.shared.start()
+        } else {
+            RemoteControlClient.shared.stop()
+        }
     }
 
     private func updateStatusIcon(for status: TranscriptionStatus) {
