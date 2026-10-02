@@ -6,13 +6,13 @@ set -euo pipefail
 
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <path-to-app> [output-dmg]"
-    echo "Example: $0 /path/to/yaprflow.app"
-    echo "Example: $0 /path/to/yaprflow.app ./yaprflow.dmg"
+    echo "Example: $0 /path/to/Voiceling.app"
+    echo "Example: $0 /path/to/Voiceling.app ./Voiceling.dmg"
     exit 1
 fi
 
 APP="$1"
-DMG="${2:-$(pwd)/yaprflow.dmg}"
+DMG="${2:-$(pwd)/Voiceling.dmg}"
 KEYCHAIN_PROFILE="${NOTARY_PROFILE:-notary-yaprflow-mw}"
 SIGNING_IDENTITY="${DEVELOPER_ID_APPLICATION:-17530C078CB507252BC9CB8EEAA9143310583C56}"
 
@@ -34,8 +34,8 @@ if ! codesign -d --verbose=4 "$APP" 2>&1 | grep -Eq "^CodeDirectory .*flags=.*\\
 fi
 
 echo "==> Staging app..."
-STAGE="$(mktemp -d -t yaprflow-dmg.XXXXXX)"
-RW_DMG="$STAGE/yaprflow-rw.dmg"
+STAGE="$(mktemp -d -t voiceling-dmg.XXXXXX)"
+RW_DMG="$STAGE/voiceling-rw.dmg"
 MOUNT_DIR="$STAGE/mnt"
 mkdir -p "$MOUNT_DIR"
 trap '
@@ -43,17 +43,17 @@ trap '
     rm -rf "$STAGE"
 ' EXIT
 
-ditto "$APP" "$STAGE/yaprflow.app"
-SIZE_MB=$(( $(du -sm "$STAGE/yaprflow.app" | awk '{print $1}') + 50 ))
+ditto "$APP" "$STAGE/Voiceling.app"
+SIZE_MB=$(( $(du -sm "$STAGE/Voiceling.app" | awk '{print $1}') + 50 ))
 
 echo "==> Creating ${SIZE_MB}MB read-write DMG..."
-hdiutil create -size "${SIZE_MB}m" -fs HFS+ -volname Yaprflow -ov "$RW_DMG"
+hdiutil create -size "${SIZE_MB}m" -fs HFS+ -volname Voiceling -ov "$RW_DMG"
 
 echo "==> Attaching under /tmp (bypasses /Volumes TCC protection)..."
 hdiutil attach "$RW_DMG" -mountpoint "$MOUNT_DIR" -nobrowse -noautoopen
 
 echo "==> Copying app into DMG..."
-ditto "$STAGE/yaprflow.app" "$MOUNT_DIR/yaprflow.app"
+ditto "$STAGE/Voiceling.app" "$MOUNT_DIR/Voiceling.app"
 
 echo "==> Adding /Applications shortcut..."
 ln -s /Applications "$MOUNT_DIR/Applications"

@@ -2,7 +2,7 @@
 
 """Generate offline grammar candidates for the representative review set.
 
-Run through uv so this does not add Python dependencies to yaprflow:
+Run through uv so this does not add Python dependencies to Voiceling:
 
   uv run --python 3.11 --with 'mlx-lm>=0.30,<0.32' \
     python scripts/generate-review-candidates.py

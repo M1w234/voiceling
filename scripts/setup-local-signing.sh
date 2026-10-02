@@ -46,7 +46,7 @@ openssl req -x509 -newkey rsa:2048 -days 3650 -nodes \
 # / SHA-256, which the macOS Security framework rejects during `security
 # import` ("MAC verification failed"). A throwaway password keeps it simple;
 # we tear the .p12 down right after import so it's not a real secret.
-PKCS_PASS="yaprflow-setup"
+PKCS_PASS="voiceling-setup"
 openssl pkcs12 -export -legacy \
     -keypbe PBE-SHA1-3DES \
     -certpbe PBE-SHA1-3DES \
@@ -99,7 +99,7 @@ echo ""
 echo "Next:"
 echo "  1. Run: ./scripts/dev-build.sh  (now signs with this identity)"
 echo "  2. Reset stale TCC entry, then grant AX one more time:"
-echo "       tccutil reset Accessibility com.teamwong.yaprflow"
-echo "     → click Auto-Paste in the yaprflow menu, grant in System Settings."
+echo "       tccutil reset Accessibility com.teamwong.voiceling"
+echo "     → click Auto-Paste in the Voiceling menu, grant in System Settings."
 echo "  3. Future rebuilds should keep the grant — same cert, same signature,"
 echo "     same TCC requirement."

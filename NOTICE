@@ -1,0 +1,16 @@
+Voiceling
+Copyright 2026 Michael Wong
+
+This product includes software originally developed as Yaprflow by Tim Moreton
+(https://github.com/tmoreton/yaprflow), used under the Apache License 2.0 as of
+revision 3418f91 (May 2, 2026). That code has been modified and extended; files
+derived from it have been changed from their original form. Voiceling is not
+affiliated with or endorsed by Yaprflow or its author, and "Yaprflow" is a
+trademark of its owner.
+
+Speech recognition uses NVIDIA Parakeet TDT 0.6B v2, converted to Core ML by
+FluidInference (https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v2-coreml),
+licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
+
+Third-party Swift packages (FluidAudio, MLX Swift, swift-transformers and their
+dependencies) are used under their respective licenses.

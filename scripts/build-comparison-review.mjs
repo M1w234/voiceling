@@ -10,7 +10,7 @@ const defaultOutputDir = path.join(repoRoot, "build.noindex", "comparison-review
 const outputDir = process.argv[2] ? path.resolve(process.argv[2]) : defaultOutputDir;
 const logPath = path.join(
   home,
-  "Library/Containers/com.teamwong.yaprflow/Data/Library/Application Support/yaprflow/comparison-log.jsonl",
+  "Library/Containers/com.teamwong.voiceling/Data/Library/Application Support/Voiceling/comparison-log.jsonl",
 );
 const wisprDB = path.join(home, "Library/Application Support/Wispr Flow/flow.sqlite");
 const candidatePath = path.join(outputDir, "candidate-results.jsonl");
@@ -372,7 +372,7 @@ const reviewSeed = {
   schemaVersion: 2,
   generatedAt: new Date().toISOString(),
   sources: {
-    yaprflowLog: logPath,
+    voicelingLog: logPath,
     wisprDatabase: wisprDB,
     candidateResults: fs.existsSync(candidatePath) ? candidatePath : null,
   },
@@ -399,7 +399,7 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Yaprflow Dictation Review</title>
+<title>Voiceling Dictation Review</title>
 <style>
 :root{color-scheme:dark;--bg:#090b10;--panel:#11151d;--panel2:#171c26;--line:#293140;--text:#f2f5f8;--muted:#99a4b3;--blue:#78a9ff;--green:#52d6a1;--amber:#ffc66d;--red:#ff7f87;--violet:#b69cff}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% -10%,#1c2440 0,transparent 38%),var(--bg);color:var(--text);font:14px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif}
@@ -447,9 +447,9 @@ main{padding:22px;min-width:0}.toolbar{display:flex;gap:8px;align-items:center;p
   <details class="guide" open>
     <summary>How to use this review</summary>
     <ol>
-      <li><b>Yaprflow Raw</b> is what local speech recognition heard. It is the comparison baseline.</li>
-      <li><b>Yaprflow Light</b> only applies safe mechanical cleanup. Green underlines are additions; red strikeouts are removals compared with Raw.</li>
-      <li>Compare Wispr and each local grammar model. A red-bordered model would be rejected by Yaprflow’s safety validator and fall back to Raw.</li>
+      <li><b>Voiceling Raw</b> is what local speech recognition heard. It is the comparison baseline.</li>
+      <li><b>Voiceling Light</b> only applies safe mechanical cleanup. Green underlines are additions; red strikeouts are removals compared with Raw.</li>
+      <li>Compare Wispr and each local grammar model. A red-bordered model would be rejected by Voiceling’s safety validator and fall back to Raw.</li>
       <li>If several versions sound equally good, mark all of them <b>Acceptable</b> and choose <b>Several are fine</b>. No stylistic winner is required.</li>
       <li>Use <b>Context missing</b> when an important word, qualifier, relationship, or intent disappeared. Record the critical word or meaning below.</li>
       <li>Only use <b>Prefer this</b> or edit an ideal when one version is clearly better or none are acceptable.</li>
@@ -473,8 +473,8 @@ main{padding:22px;min-width:0}.toolbar{display:flex;gap:8px;align-items:center;p
 const DATA=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob("${dataBase64}"),c=>c.charCodeAt(0))));
 const STORAGE_KEY="yaprflow-dictation-review-v1";
 const candidateDefs=[
-  ["raw","Yaprflow Raw",p=>p.yapr.raw],
-  ["light","Yaprflow Light",p=>p.yapr.light],
+  ["raw","Voiceling Raw",p=>p.yapr.raw],
+  ["light","Voiceling Light",p=>p.yapr.light],
   ["wisprRaw","Wispr Raw",p=>p.wispr.raw],
   ["wisprFormatted","Wispr Formatted",p=>p.wispr.formatted],
   ["currentPolish","Current Qwen2.5 Polish",p=>p.candidates.qwen25?.output||p.yapr.currentPolish],

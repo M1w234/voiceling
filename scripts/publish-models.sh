@@ -12,7 +12,7 @@ TARBALL="parakeet-v2-encoder.tar.gz"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/Models/parakeet-tdt-0.6b-v2"
-STAGE="$(mktemp -d -t yaprflow-models.XXXXXX)"
+STAGE="$(mktemp -d -t voiceling-models.XXXXXX)"
 trap 'rm -rf "$STAGE"' EXIT
 
 if [ ! -d "$SRC/Encoder.mlmodelc" ]; then
@@ -37,7 +37,7 @@ else
     gh release create "$MODELS_TAG" "$STAGE/$TARBALL" \
         --repo "$REPO_SLUG" \
         --title "Parakeet TDT 0.6B v2 Encoder (Core ML)" \
-        --notes "Core ML Encoder.mlmodelc for FluidInference/parakeet-tdt-0.6b-v2-coreml. Downloaded on first launch by Yaprflow; small model pieces ship inside the app bundle."
+        --notes "Core ML Encoder.mlmodelc for FluidInference/parakeet-tdt-0.6b-v2-coreml. Downloaded on first launch by Voiceling; small model pieces ship inside the app bundle."
 fi
 
 echo "Done."

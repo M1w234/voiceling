@@ -1,19 +1,19 @@
-# yaprflow — Local Dictation App (Patched Fork)
+# Voiceling — Local Dictation App
 
-Local-first macOS menubar dictation app. Cloned from [tmoreton/yaprflow](https://github.com/tmoreton/yaprflow) (Apache-2.0) and patched with new push-to-talk modes. Local STT via Parakeet TDT 0.6B v2 on MLX. Swift / AppKit / Carbon hotkey API.
+Local-first macOS menubar dictation app, part of the Deskling family. Originally forked from Yaprflow at its Apache-2.0 revision `3418f91` (see `NOTICE`); not affiliated with Yaprflow. Do not pull from or push to the Yaprflow repository — its later code is under a noncommercial license, and the name and icon are its owner's trademarks. Local STT via Parakeet TDT 0.6B v2 on MLX. Swift / AppKit / Carbon hotkey API.
 
 ## Quick Status
 
 | Thing | Where |
 |-------|-------|
 | Source | `~/yaprflow/` (this repo) |
-| Built app | `~/yaprflow/build.noindex/Build/Products/Release/yaprflow.app` |
-| Installed app | `/Applications/yaprflow.app` |
-| Bundle ID | `com.teamwong.yaprflow` |
-| Saved hotkey config | `~/Library/Containers/com.teamwong.yaprflow/Data/Library/Preferences/com.teamwong.yaprflow.plist` |
+| Built app | `~/yaprflow/build.noindex/Build/Products/Release/Voiceling.app` |
+| Installed app | `/Applications/Voiceling.app` |
+| Bundle ID | `com.teamwong.voiceling` |
+| Saved hotkey config | `~/Library/Containers/com.teamwong.voiceling/Data/Library/Preferences/com.teamwong.voiceling.plist` |
 | Speech models | `~/yaprflow/Models/parakeet-tdt-0.6b-v2/` plus `Models/silero-vad/` (gitignored) |
 | Signing | Developer ID for releases; local self-signed identity for dev builds. |
-| Friend build | Notarized `build/yaprflow.dmg` via `scripts/release.sh` |
+| Friend build | Notarized `build/Voiceling.dmg` via `scripts/release.sh` |
 
 ## Rebuild Loop (after editing source)
 
@@ -23,41 +23,41 @@ One command:
 cd ~/yaprflow && ./scripts/dev-build.sh
 ```
 
-Quits running yaprflow, builds Release, applies the stable local signing identity
-when available, replaces `/Applications/yaprflow.app`, strips quarantine, and
+Quits running Voiceling, builds Release, applies the stable local signing identity
+when available, replaces `/Applications/Voiceling.app`, strips quarantine, and
 relaunches. First build ~3 min; incremental builds ~30 sec.
 
 Manual equivalent:
 ```bash
-xcodebuild -project yaprflow.xcodeproj -scheme yaprflow -configuration Release \
+xcodebuild -project Voiceling.xcodeproj -scheme Voiceling -configuration Release \
   -derivedDataPath build.noindex CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
-osascript -e 'tell application "yaprflow" to quit'
-rm -rf /Applications/yaprflow.app
-cp -R build.noindex/Build/Products/Release/yaprflow.app /Applications/
-xattr -dr com.apple.quarantine /Applications/yaprflow.app
-open /Applications/yaprflow.app
+osascript -e 'tell application "Voiceling" to quit'
+rm -rf /Applications/Voiceling.app
+cp -R build.noindex/Build/Products/Release/Voiceling.app /Applications/
+xattr -dr com.apple.quarantine /Applications/Voiceling.app
+open /Applications/Voiceling.app
 ```
 
 ## Architecture (the parts that matter)
 
-- **Sandboxed** (`yaprflow/yaprflow.entitlements`): app-sandbox + audio-input + network.client. Affects what hotkey APIs are usable.
+- **Sandboxed** (`Voiceling/Voiceling.entitlements`): app-sandbox + audio-input + network.client. Affects what hotkey APIs are usable.
 - **Hotkeys**: key-based shortcuts use Carbon `RegisterEventHotKey` via
   `GlobalHotkey.swift`. Modifier-only shortcuts use a listen-only `CGEventTap`
   in `ModifierOnlyHotkey.swift` and require both Accessibility and Input
   Monitoring permission.
-- **Synchronized file groups**: `yaprflow.xcodeproj` uses Xcode 16 `PBXFileSystemSynchronizedRootGroup` — new `.swift` files in `yaprflow/` are auto-picked-up by the project. No `.pbxproj` editing.
+- **Synchronized file groups**: `Voiceling.xcodeproj` uses Xcode 16 `PBXFileSystemSynchronizedRootGroup` — new `.swift` files in `Voiceling/` are auto-picked-up by the project. No `.pbxproj` editing.
 - **Speech pipeline**: `TranscriptionController` → `AudioCapture` → VAD (`FluidAudio`) → Parakeet ASR (MLX/CoreML mlmodelc bundles in `Models/`). Final text → clipboard.
 - **Grammar mode (optional)**: `GrammarController` runs a small MLX LLM on the transcript before pasting.
 - **Menu**: `AppDelegate.installStatusItem()` builds menu from custom NSView-based items (`HotkeyMenuItemView`, `HotkeyModeMenuItemView`, `StreamingModeMenuItemView`, etc.). All toggle-style items follow the same NSView pattern.
 
-## Patches Applied (vs. upstream tmoreton/yaprflow)
+## Changes Since the Fork Point (`3418f91`)
 
 | File | Change |
 |------|--------|
 | `HotkeyConfig.swift` | Added `HotkeyMode` enum (`tapToToggle` \| `holdToTalk`), back-compat `decodeIfPresent` for the `mode` field. Added F13–F19, arrow, Page/Home/End labels in `displayString`. |
 | `GlobalHotkey.swift` | Installed `kEventHotKeyReleased` handler alongside the existing pressed handler. `onFire` → `onPressed` + `onReleased`. |
 | `TranscriptionController.swift` | Added `desiredActive` flag + `setActive(_:)` method. Race-safe push-to-talk: `start()` re-checks `desiredActive` after each `await` and bails if user already released. |
-| `AppDelegate.swift` | `wireHotkeyCallbacks(for:)` dispatches based on `config.mode`. Re-wires on `yaprflowHotkeyChanged`. |
+| `AppDelegate.swift` | `wireHotkeyCallbacks(for:)` dispatches based on `config.mode`. Re-wires on `voicelingHotkeyChanged`. |
 | `HotkeyMenuItemView.swift` | Removed "must have a modifier" guard so picker accepts F-keys, Space, etc. Mode preserved when re-recording. |
 | `HotkeyModeMenuItemView.swift` (new) | Toggle row in menu: "Tap to Toggle" ↔ "Hold to Talk". |
 | `ExternalHotkey.swift` / `ExternalHotkeyMenuItemView.swift` | Optional independent key-based trigger for programmable mice, with separate enable, shortcut, trigger-mode, and preserved primary-shortcut pause controls. |
@@ -104,7 +104,7 @@ when changing them:
   ```
 - **First recording delay** — ~30s on a cold launch while the Parakeet Encoder compiles. `TranscriptionController.preload()` runs at launch to warm this in the background.
 - **Mic permission** — granted in System Settings → Privacy → Microphone
-  (yaprflow). The Team Wong bundle ID is stable across signed releases.
+  (Voiceling). The Team Wong bundle ID is stable across signed releases.
 
 ## Common Tasks
 
@@ -118,7 +118,6 @@ when changing them:
   before publishing it.
 - **"Improve the menu UI"** — copy the `StreamingModeMenuItemView` / `HotkeyModeMenuItemView` pattern. Custom NSView, layout in `setupLayout()`, refresh on Combine subscription, mutate AppState on `mouseDown`.
 - **"Bump the speech model"** — update `scripts/fetch-models.sh` (or just download manually) + the `Models/` Copy Models phase reference in the .pbxproj.
-- **"Make this push upstream"** — `git remote add fork <your-fork-url>`, push branch, open a PR to tmoreton/yaprflow. Re-test under their Developer ID signing path before submitting.
 
 ## Don't Bother
 

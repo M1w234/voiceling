@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Local dev build + install. Prefers the same Developer ID identity used by
-# public releases so replacing /Applications/yaprflow.app does not create stale
+# public releases so replacing /Applications/Voiceling.app does not create stale
 # Accessibility or Input Monitoring entries. Falls back to the stable local
 # identity (or ad-hoc) when the release identity is unavailable.
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$ROOT/build.noindex/Build/Products/Release/yaprflow.app"
-DEST="/Applications/yaprflow.app"
+APP="$ROOT/build.noindex/Build/Products/Release/Voiceling.app"
+DEST="/Applications/Voiceling.app"
 
 cd "$ROOT"
 
@@ -26,19 +26,19 @@ SIGN_IDENTITY=""
 
 if security find-identity -v -p codesigning 2>/dev/null | grep -Fq "$DEVELOPER_IDENTITY"; then
     SIGN_IDENTITY="$DEVELOPER_IDENTITY"
-    echo "==> Building yaprflow (Release; will re-sign with the public Developer ID)…"
+    echo "==> Building Voiceling (Release; will re-sign with the public Developer ID)…"
 elif security find-identity -v -p codesigning 2>/dev/null | grep -Fq "$LOCAL_SIGN_IDENTITY"; then
     SIGN_IDENTITY="$LOCAL_SIGN_IDENTITY"
-    echo "==> Building yaprflow (Release; public identity unavailable, using '$LOCAL_SIGN_IDENTITY')…"
+    echo "==> Building Voiceling (Release; public identity unavailable, using '$LOCAL_SIGN_IDENTITY')…"
     echo "    Switching back to a public build will require repairing macOS privacy entries once."
 else
-    echo "==> Building yaprflow (Release, ad-hoc)…"
+    echo "==> Building Voiceling (Release, ad-hoc)…"
     echo "    Rebuilds may invalidate Accessibility and Input Monitoring permissions."
 fi
 
 xcodebuild \
-    -project yaprflow.xcodeproj \
-    -scheme yaprflow \
+    -project Voiceling.xcodeproj \
+    -scheme Voiceling \
     -configuration Release \
     -derivedDataPath build.noindex \
     CODE_SIGN_IDENTITY=- \
@@ -59,20 +59,20 @@ if [ -n "$SIGN_IDENTITY" ]; then
     echo "==> Re-signing .app with '$SIGN_IDENTITY'…"
     codesign --force --deep --options runtime \
         --sign "$SIGN_IDENTITY" \
-        --entitlements "$ROOT/yaprflow/yaprflow.entitlements" \
+        --entitlements "$ROOT/Voiceling/Voiceling.entitlements" \
         "$APP"
 fi
 
-echo "==> Quitting running yaprflow…"
-osascript -e 'tell application "yaprflow" to quit' 2>/dev/null || true
+echo "==> Quitting running Voiceling…"
+osascript -e 'tell application "Voiceling" to quit' 2>/dev/null || true
 for _ in {1..20}; do
-    if ! pgrep -x yaprflow >/dev/null 2>&1; then
+    if ! pgrep -x Voiceling >/dev/null 2>&1; then
         break
     fi
     sleep 0.5
 done
-if pgrep -x yaprflow >/dev/null 2>&1; then
-    echo "❌ yaprflow did not quit within 10 seconds; leaving the installed app untouched." >&2
+if pgrep -x Voiceling >/dev/null 2>&1; then
+    echo "❌ Voiceling did not quit within 10 seconds; leaving the installed app untouched." >&2
     exit 1
 fi
 

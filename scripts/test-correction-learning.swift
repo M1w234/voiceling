@@ -165,7 +165,7 @@ private struct TemporaryVocabularyFixture {
 
     init() throws {
         directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("yaprflow-correction-tests-\(UUID().uuidString)")
+            .appendingPathComponent("voiceling-correction-tests-\(UUID().uuidString)")
         fileURL = directory.appendingPathComponent("vocabulary.json")
         try FileManager.default.createDirectory(
             at: directory,

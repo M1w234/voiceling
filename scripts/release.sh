@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds yaprflow.app, signs + notarizes + staples it, packages it into a styled
+# Builds Voiceling.app, signs + notarizes + staples it, packages it into a styled
 # DMG, and (optionally) tags the commit and uploads the DMG to GitHub Releases.
 #
 # Usage:
@@ -65,9 +65,9 @@ done
 
 # ---- Config ------------------------------------------------------------------
 
-APP_NAME="yaprflow"
-SCHEME="yaprflow"
-PROJECT="yaprflow.xcodeproj"
+APP_NAME="Voiceling"
+SCHEME="Voiceling"
+PROJECT="Voiceling.xcodeproj"
 CONFIGURATION="Release"
 
 BUILD_DIR="build"
@@ -412,7 +412,7 @@ if [[ "$PUBLISH" == true ]]; then
         echo "==> Tag $TAG already exists locally — skipping create"
     else
         echo "==> Tagging $TAG"
-        git tag -a "$TAG" -m "yaprflow $VERSION"
+        git tag -a "$TAG" -m "Voiceling $VERSION"
     fi
 
     if git ls-remote --tags origin "$TAG" 2>/dev/null | grep -q "refs/tags/$TAG"; then
@@ -429,7 +429,7 @@ if [[ "$PUBLISH" == true ]]; then
         fi
     else
         echo "==> Creating GitHub release"
-        RELEASE_ARGS=("$TAG" "$DMG_PATH" --repo "$GH_REPO" --title "yaprflow $VERSION")
+        RELEASE_ARGS=("$TAG" "$DMG_PATH" --repo "$GH_REPO" --title "Voiceling $VERSION")
         if [[ -n "$NOTES" ]]; then
             RELEASE_ARGS+=(--notes "$NOTES")
         else

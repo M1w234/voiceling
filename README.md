@@ -1,13 +1,13 @@
 <div align="center">
-  <img src="yaprflow/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" alt="Yaprflow">
-  <h1>Yaprflow MW</h1>
-  <p><strong>Private, offline dictation for macOS — Wispr Flow style.</strong></p>
+  <img src="Voiceling/Assets.xcassets/AppIcon.appiconset/icon_256.png" width="128" alt="Voiceling">
+  <h1>Voiceling</h1>
+  <p><strong>Private, offline dictation for macOS.</strong></p>
   <p>Hold your hotkey. Speak. Release. The text appears in the focused field.</p>
 </div>
 
 ---
 
-A personal fork of [tmoreton/yaprflow](https://github.com/tmoreton/yaprflow) with the features I wanted for daily dictation. Same local-first speech pipeline (Parakeet TDT 0.6B on the Neural Engine), same Apache-2.0 license, same menubar app — plus a handful of additions:
+Voiceling is a local-first menubar dictation app for Apple-silicon Macs, and the voice half of the Deskling desk companion. Speech is transcribed on-device with Parakeet TDT 0.6B on the Neural Engine. Highlights:
 
 - ⌨️ **Automatic insertion** — writes the transcript directly into the focused
   text field without replacing your clipboard. Focus-race guarded (it will not
@@ -18,7 +18,7 @@ A personal fork of [tmoreton/yaprflow](https://github.com/tmoreton/yaprflow) wit
   add a second key-based trigger for Logitech Options+ or other mouse-remapping
   software, with its own tap-to-toggle or hold-to-talk mode.
 - ⌨️ **F-key hotkeys** — F13–F19, arrow keys, Page/Home/End are all bindable. No more "must include a modifier" guard.
-- 🎵 **Personalized start / stop chimes** — adjust Yaprflow's volume, choose bundled or macOS sounds, or import a local WAV, AIFF, M4A, MP3, or CAF file.
+- 🎵 **Personalized start / stop chimes** — adjust Voiceling's volume, choose bundled or macOS sounds, or import a local WAV, AIFF, M4A, MP3, or CAF file.
 - 🪟 **Wispr-style overlay** — floating pill at the bottom-center of the screen with three audio-level bars that bounce as you speak.
 - 🔒 **100% local** — audio never leaves your Mac. No accounts, no telemetry.
 - ✍️ **Three cleanup levels** — Off preserves the transcript, Light performs
@@ -28,13 +28,13 @@ A personal fork of [tmoreton/yaprflow](https://github.com/tmoreton/yaprflow) wit
   searchable Vocabulary window or directly from History. Optional same-field
   learning notices a distinctive name you correct after automatic insertion;
   it runs locally and ignores broad rewrites and secure fields.
-- 📝 **Summarize** — condense any transcript on demand (inherited from upstream).
+- 📝 **Summarize** — condense any transcript on demand.
 
 ## Install
 
 The easiest path is the notarized disk image on the
 [latest GitHub Release](https://github.com/M1w234/yaprflow-mw/releases/latest).
-Download the `.dmg`, open it, and drag **yaprflow** to Applications. The speech
+Download the `.dmg`, open it, and drag **Voiceling** to Applications. The speech
 model is already bundled, and the app is signed and notarized by Apple.
 [SETUP.md](SETUP.md) has the complete permission walkthrough.
 
@@ -52,12 +52,12 @@ cd yaprflow-mw
 ```
 
 `dev-build.sh` does the full loop: builds Release, applies the stable local
-signing identity when available, replaces `/Applications/yaprflow.app`, strips
+signing identity when available, replaces `/Applications/Voiceling.app`, strips
 Gatekeeper quarantine, and relaunches. ~3 min cold, ~30 s incremental.
 
 ## Enabling Automatic Insertion
 
-Automatic Insertion needs macOS Accessibility permission so Yaprflow can type
+Automatic Insertion needs macOS Accessibility permission so Voiceling can type
 into the field you were using:
 
 1. Click the waveform icon in your menubar → **Automatic Insertion**
@@ -67,7 +67,7 @@ into the field you were using:
 If you ever rebuild from source, you may need to re-grant — ad-hoc signed apps get a fresh code-directory hash each build, which can invalidate the TCC entry. Quickest reset:
 
 ```bash
-tccutil reset Accessibility com.teamwong.yaprflow
+tccutil reset Accessibility com.teamwong.voiceling
 ```
 
 Then click **Automatic Insertion** in the menu again to re-prompt.
@@ -75,14 +75,14 @@ Then click **Automatic Insertion** in the menu again to re-prompt.
 ## Teaching Names and Corrections
 
 Open the waveform menu → **Vocabulary…**, then add both the spelling you want
-and what Yaprflow heard. For an existing transcript, open **History…**,
+and what Voiceling heard. For an existing transcript, open **History…**,
 right-click it, and choose **Correct & Learn…**. The correction is saved locally
 and applied to future final transcripts.
 
 **Learn from corrections** is optional and requires Automatic Insertion. When
-enabled, Yaprflow briefly watches the range it just inserted, plus small
+enabled, Voiceling briefly watches the range it just inserted, plus small
 in-memory boundary checks. If you correct one distinctive name or term in that
-same field, Yaprflow saves the localized replacement. It does not install a
+same field, Voiceling saves the localized replacement. It does not install a
 global keyboard monitor, persist surrounding document text, learn from secure
 fields, or turn broad sentence rewrites into global rules.
 
@@ -98,27 +98,27 @@ fields, or turn broad sentence rewrites into global rules.
    **Keyboard Shortcut** to **Paused** in the External Button submenu.
 
 This second trigger is independent. Enabling, disabling, or changing it does
-not replace the saved main Yaprflow keyboard shortcut. Pausing that shortcut
+not replace the saved main Voiceling keyboard shortcut. Pausing that shortcut
 only stops listening for it; its keys and trigger mode remain saved. Turning
 the external button off—or failing to register it—automatically restores the
-keyboard shortcut so Yaprflow is never left without a trigger. Tap to Toggle
+keyboard shortcut so Voiceling is never left without a trigger. Tap to Toggle
 is the most compatible option; Hold to Talk requires the remapping software to
 preserve both key-down and key-up events.
 
-## What's deliberately different from upstream
+## Distribution
 
-- **Distinct bundle ID** (`com.teamwong.yaprflow`) so this fork has its own
-  signing identity, settings container, and macOS permission records.
+- **Bundle ID** `com.teamwong.voiceling`, with its own signing identity,
+  settings container, and macOS permission records.
 - **Notarized releases** — downloadable `.dmg` files are Developer ID signed,
   submitted to Apple's notary service, stapled, and Gatekeeper-checked before
   publishing.
-- **Overlay position moved** from top-of-screen (notch-attached) to bottom-center, where Wispr Flow puts theirs.
+- **Overlay** sits at the bottom-center of the screen.
 
 ## Credits
 
-- All the heavy lifting (ASR pipeline, MLX integration, menubar architecture, grammar correction) is [Tim Moreton's](https://github.com/tmoreton). This fork only adds UX polish on top.
+- Voiceling began as a fork of [Yaprflow](https://github.com/tmoreton/yaprflow) by Tim Moreton, taken while it was Apache-2.0 licensed (revision `3418f91`). It has since been substantially rewritten and is not affiliated with or endorsed by Yaprflow. See [NOTICE](NOTICE).
 - Speech model: [FluidInference's Parakeet TDT 0.6B v2 (CoreML)](https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v2-coreml), CC-BY-4.0.
 
 ## License
 
-Apache 2.0, same as upstream.
+Apache 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
