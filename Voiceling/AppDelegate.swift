@@ -133,8 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     private func installStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            button.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voiceling")
-            button.image?.isTemplate = true
+            button.image = Self.idleStatusImage()
         }
 
         let menu = NSMenu()
@@ -404,6 +403,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         }
     }
 
+    /// The Voiceling mark as a template glyph, so macOS tints it for light and
+    /// dark menu bars.
+    private static func idleStatusImage() -> NSImage? {
+        let image = NSImage(named: "StatusIcon")
+        image?.isTemplate = true
+        image?.accessibilityDescription = "Voiceling"
+        return image
+    }
+
     private func updateStatusIcon(for status: TranscriptionStatus) {
         guard let button = statusItem?.button else { return }
         if case .listening = status {
@@ -416,9 +424,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             image?.isTemplate = false
             button.image = image
         } else {
-            let image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Voiceling")
-            image?.isTemplate = true
-            button.image = image
+            button.image = Self.idleStatusImage()
         }
     }
 

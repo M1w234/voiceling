@@ -262,9 +262,10 @@ struct OnboardingView: View {
     private var readyScreen: some View {
         VStack(spacing: 0) {
             Spacer()
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: 72))
-                .foregroundStyle(.white)
+            Image("VoicelingMark")
+                .resizable()
+                .frame(width: 72, height: 72)
+                .foregroundStyle(Color(red: 0.8, green: 0.949, blue: 0.541))
             Text("Ready to dictate")
                 .font(.system(size: 26, weight: .semibold))
                 .foregroundStyle(.white)
