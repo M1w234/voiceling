@@ -65,7 +65,12 @@ copy_dir() {  # copy_dir <source> <destination> <label>
         mv "$dest" "$dest.pre-migration-$STAMP"
     fi
     mkdir -p "$(dirname "$dest")"
-    cp -Rc "$src" "$dest"   # -c clones on APFS: instant, no duplicate disk use
+    # -c clones on APFS (instant, no duplicate disk use); fall back to a plain
+    # copy if cloning is interrupted.
+    if ! cp -Rc "$src" "$dest" 2>/dev/null; then
+        rm -rf "$dest"
+        cp -R "$src" "$dest"
+    fi
     echo "    $label: copied"
 }
 
