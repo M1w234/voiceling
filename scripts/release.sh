@@ -334,6 +334,8 @@ hdiutil create \
     -format UDRW \
     "$TEMP_DMG" >/dev/null
 
+# HEADLESS_DMG=1 skips optional Finder presentation settings for automated builds.
+if [[ "${HEADLESS_DMG:-0}" != 1 ]]; then
 echo "==> Mounting and styling"
 MOUNT_OUTPUT=$(hdiutil attach -readwrite -noverify -noautoopen "$TEMP_DMG")
 DEVICE=$(echo "$MOUNT_OUTPUT" | grep -E '^/dev/' | head -n1 | awk '{print $1}')
@@ -372,6 +374,8 @@ sync
 
 echo "==> Detaching"
 hdiutil detach "$DEVICE" -quiet || hdiutil detach "$DEVICE" -force
+
+fi
 
 echo "==> Compressing"
 hdiutil convert "$TEMP_DMG" -format UDZO -imagekey zlib-level=9 -o "$DMG_PATH" >/dev/null
