@@ -48,6 +48,8 @@ if [ -f "$OLD_PREFS.plist" ]; then
     defaults export "$OLD_PREFS" - \
         | sed -e 's|<key>yaprflow\.|<key>voiceling.|' -e 's|<string>Yapr |<string>Voiceling |' \
         | defaults import "$NEW_PREFS" -
+    # Permissions never carry over, so let onboarding walk through them again.
+    defaults delete "$NEW_PREFS" voiceling.didCompleteOnboarding 2>/dev/null || true
     echo "    $(defaults read "$NEW_PREFS" | grep -c '"voiceling\.') settings copied"
 else
     echo "    none found"
