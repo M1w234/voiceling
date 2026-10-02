@@ -1,3 +1,5 @@
+// Modified by Michael Wong for Voiceling, 2026; originally from Yaprflow (Apache-2.0). See NOTICE.
+
 import AppKit
 import AVFoundation
 import Combine
@@ -14,7 +16,8 @@ struct OnboardingView: View {
     let onComplete: () -> Void
 
     @State private var step: OnboardingStep = .welcome
-    @State private var automaticInsertionSelected: Bool = true
+    @State private var automaticInsertionSelected: Bool =
+        AppState.hasSavedPreferences ? AppState.shared.autoPasteMode : true
     @State private var micStatus: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .audio)
     @State private var accessibilityTrusted: Bool = AutoPaste.hasAccessibility
 
@@ -58,11 +61,13 @@ struct OnboardingView: View {
                 .padding(.top, 8)
             Spacer()
             Button {
-                // The recommended path is intentionally opinionated: process
+                // For a new install the recommended path is opinionated: process
                 // the full recording for accuracy, then apply fast mechanical
                 // cleanup. Alternative modes remain available under Advanced.
-                AppState.shared.streamingMode = false
-                AppState.shared.cleanupMode = .light
+                if !AppState.hasSavedPreferences {
+                    AppState.shared.streamingMode = false
+                    AppState.shared.cleanupMode = .light
+                }
                 withAnimation(.easeInOut(duration: 0.25)) { step = .automaticInsertion }
             } label: {
                 Text("Get started").frame(maxWidth: .infinity)

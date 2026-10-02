@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Modified by Michael Wong for Voiceling, 2026; originally from Yaprflow (Apache-2.0). See NOTICE.
 # Builds Voiceling.app, signs + notarizes + staples it, packages it into a styled
 # DMG, and (optionally) tags the commit and uploads the DMG to GitHub Releases.
 #
@@ -415,10 +416,13 @@ if [[ "$PUBLISH" == true ]]; then
         git tag -a "$TAG" -m "Voiceling $VERSION"
     fi
 
-    if git ls-remote --tags origin "$TAG" 2>/dev/null | grep -q "refs/tags/$TAG"; then
-        echo "==> Tag $TAG already on origin — skipping push"
+    # Push the tag to the repository the release is published on, which is not
+    # necessarily this checkout's origin.
+    TAG_REMOTE="https://github.com/${GH_REPO}.git"
+    if git ls-remote --tags "$TAG_REMOTE" "$TAG" 2>/dev/null | grep -q "refs/tags/$TAG"; then
+        echo "==> Tag $TAG already on $GH_REPO — skipping push"
     else
-        git push origin "$TAG"
+        git push "$TAG_REMOTE" "$TAG"
     fi
 
     if gh release view "$TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
@@ -429,7 +433,7 @@ if [[ "$PUBLISH" == true ]]; then
         fi
     else
         echo "==> Creating GitHub release"
-        RELEASE_ARGS=("$TAG" "$DMG_PATH" --repo "$GH_REPO" --title "Voiceling $VERSION")
+        RELEASE_ARGS=("$TAG" "$DMG_PATH" --repo "$GH_REPO" --title "Voiceling $VERSION" --verify-tag)
         if [[ -n "$NOTES" ]]; then
             RELEASE_ARGS+=(--notes "$NOTES")
         else

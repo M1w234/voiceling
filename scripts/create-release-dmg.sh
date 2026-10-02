@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Modified by Michael Wong for Voiceling, 2026; originally from Yaprflow (Apache-2.0). See NOTICE.
 # Create a code-signed DMG without submitting it for notarization.
 # Usage: scripts/create-release-dmg.sh <path-to-app> [output-dmg]
 

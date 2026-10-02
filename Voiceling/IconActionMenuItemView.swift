@@ -1,3 +1,5 @@
+// Modified by Michael Wong for Voiceling, 2026; originally from Yaprflow (Apache-2.0). See NOTICE.
+
 import AppKit
 
 /// Menu row for action items (Copy Transcript / Copy Summary / Show History).

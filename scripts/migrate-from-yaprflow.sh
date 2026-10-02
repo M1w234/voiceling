@@ -43,11 +43,17 @@ if [ -f "$OLD_PREFS.plist" ]; then
         cp "$NEW_PREFS.plist" "$NEW_PREFS.pre-migration-$STAMP.plist"
     fi
     # `defaults export` emits an XML plist; string values are entity-escaped,
-    # so the first rule only matches real <key> elements. The second carries
-    # over a saved bundled-chime choice ("Yapr Bell" -> "Voiceling Bell").
+    # so this only matches real <key> elements.
     defaults export "$OLD_PREFS" - \
-        | sed -e 's|<key>yaprflow\.|<key>voiceling.|' -e 's|<string>Yapr |<string>Voiceling |' \
+        | sed 's|<key>yaprflow\.|<key>voiceling.|' \
         | defaults import "$NEW_PREFS" -
+    # Bundled chimes were renamed ("Yapr Bell" -> "Voiceling Bell").
+    for key in voiceling.startSoundName voiceling.stopSoundName; do
+        name="$(defaults read "$NEW_PREFS" "$key" 2>/dev/null || true)"
+        case "$name" in
+            "Yapr "*) defaults write "$NEW_PREFS" "$key" -string "Voiceling ${name#Yapr }" ;;
+        esac
+    done
     # Permissions never carry over, so let onboarding walk through them again.
     defaults delete "$NEW_PREFS" voiceling.didCompleteOnboarding 2>/dev/null || true
     echo "    $(defaults read "$NEW_PREFS" | grep -c '"voiceling\.') settings copied"
@@ -61,16 +67,21 @@ copy_dir() {  # copy_dir <source> <destination> <label>
         echo "    $label: none found"
         return
     fi
-    if [ -e "$dest" ]; then
-        mv "$dest" "$dest.pre-migration-$STAMP"
-    fi
+    # Copy beside the destination and swap it in only once complete, so a
+    # failed copy never leaves partial data where the app will read it.
+    local tmp="$dest.migrating-$STAMP"
+    rm -rf "$tmp"
     mkdir -p "$(dirname "$dest")"
     # -c clones on APFS (instant, no duplicate disk use); fall back to a plain
     # copy if cloning is interrupted.
-    if ! cp -Rc "$src" "$dest" 2>/dev/null; then
-        rm -rf "$dest"
-        cp -R "$src" "$dest"
+    if ! cp -Rc "$src" "$tmp" 2>/dev/null; then
+        rm -rf "$tmp"
+        cp -R "$src" "$tmp"
     fi
+    if [ -e "$dest" ]; then
+        mv "$dest" "$dest.pre-migration-$STAMP"
+    fi
+    mv "$tmp" "$dest"
     echo "    $label: copied"
 }
 

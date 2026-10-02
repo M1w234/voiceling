@@ -68,7 +68,7 @@
 				AFA2BC932F97E6F00048D99B /* Sources */,
 				AFA2BC942F97E6F00048D99B /* Frameworks */,
 				AFA2BC952F97E6F00048D99B /* Resources */,
-				AFA2BCC02F97E6F00048D99B /* Copy Models */,
+				AFA2BCC02F97E6F00048D99B /* Copy Models and Notices */,
 			);
 			buildRules = (
 			);
@@ -140,7 +140,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		AFA2BCC02F97E6F00048D99B /* Copy Models */ = {
+		AFA2BCC02F97E6F00048D99B /* Copy Models and Notices */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -149,16 +149,20 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/Models",
+				"$(SRCROOT)/LICENSE",
+				"$(SRCROOT)/NOTICE",
 			);
-			name = "Copy Models";
+			name = "Copy Models and Notices";
 			outputFileListPaths = (
 			);
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Models",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/LICENSE",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/NOTICE",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nSRC=\"$SRCROOT/Models\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Models\"\nif [ -d \"$SRC\" ]; then\n  mkdir -p \"$DEST\"\n  rsync -a --delete --exclude '.cache' --exclude '.DS_Store' \"$SRC/\" \"$DEST/\"\nelse\n  echo \"warning: Models/ missing — run scripts/fetch-models.sh\"\nfi\n";
+			shellScript = "set -e\nSRC=\"$SRCROOT/Models\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Models\"\nif [ -d \"$SRC\" ]; then\n  mkdir -p \"$DEST\"\n  rsync -a --delete --exclude '.cache' --exclude '.DS_Store' \"$SRC/\" \"$DEST/\"\nelse\n  echo \"warning: Models/ missing — run scripts/fetch-models.sh\"\nfi\n# Apache-2.0 and model licences travel with the binary.\ncp \"$SRCROOT/LICENSE\" \"$SRCROOT/NOTICE\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

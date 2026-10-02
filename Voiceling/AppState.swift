@@ -1,3 +1,5 @@
+// Modified by Michael Wong for Voiceling, 2026; originally from Yaprflow (Apache-2.0). See NOTICE.
+
 import Combine
 import SwiftUI
 
@@ -270,6 +272,13 @@ final class AppState: ObservableObject {
         didSet {
             UserDefaults.standard.set(desklingRemoteEnabled, forKey: Self.desklingRemoteEnabledKey)
         }
+    }
+
+    /// True when an earlier run (or a migration) saved delivery settings, so
+    /// onboarding only repairs permissions instead of resetting choices.
+    static var hasSavedPreferences: Bool {
+        UserDefaults.standard.object(forKey: cleanupModeKey) != nil
+            || UserDefaults.standard.object(forKey: grammarModeKey) != nil
     }
 
     private init() {

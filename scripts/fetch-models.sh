@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Modified by Michael Wong for Voiceling, 2026; originally from Yaprflow (Apache-2.0). See NOTICE.
 # Fetches the Parakeet TDT 0.6B v2 Core ML model into ./Models/.
 # Run once after cloning the repo.
 

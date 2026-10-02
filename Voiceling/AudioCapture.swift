@@ -1,3 +1,5 @@
+// Modified by Michael Wong for Voiceling, 2026; originally from Yaprflow (Apache-2.0). See NOTICE.
+
 @preconcurrency import AVFoundation
 
 enum AudioCaptureError: LocalizedError {

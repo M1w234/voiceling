@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Modified by Michael Wong for Voiceling, 2026; originally from Yaprflow (Apache-2.0). See NOTICE.
 # Create a signed, notarized, and stapled DMG from a .app bundle.
 # Usage: scripts/notarize-dmg.sh <path-to-app> [output-dmg]
 

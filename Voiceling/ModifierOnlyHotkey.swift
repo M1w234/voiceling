@@ -292,7 +292,12 @@ final class ModifierOnlyHotkey {
                 try? await Task.sleep(for: .seconds(3))
                 guard !Task.isCancelled, desiredMask != 0, tap == nil else { return }
                 guard AutoPaste.hasAccessibility else { continue }
-                guard InputMonitoring.hasPermission else { continue }
+                guard InputMonitoring.hasPermission else {
+                    // Accessibility may have been granted first; request Input
+                    // Monitoring now, or macOS never lists the app there.
+                    showPermissionGuidanceOnce(for: .inputMonitoring)
+                    continue
+                }
                 installTapIfNeeded()
                 if tap != nil {
                     log.info("Required permissions granted — modifier-only hotkey is now live")
