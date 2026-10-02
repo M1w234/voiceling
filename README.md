@@ -33,7 +33,7 @@ Voiceling is a local-first menubar dictation app for Apple-silicon Macs, and the
 ## Install
 
 The easiest path is the notarized disk image on the
-[latest GitHub Release](https://github.com/M1w234/yaprflow-mw/releases/latest).
+[latest GitHub Release](https://github.com/M1w234/voiceling/releases/latest).
 Download the `.dmg`, open it, and drag **Voiceling** to Applications. The speech
 model is already bundled, and the app is signed and notarized by Apple.
 [SETUP.md](SETUP.md) has the complete permission walkthrough.
@@ -45,8 +45,8 @@ model is already bundled, and the app is signed and notarized by Apple.
 Install the Hugging Face CLI first, then:
 
 ```bash
-git clone https://github.com/M1w234/yaprflow-mw.git
-cd yaprflow-mw
+git clone https://github.com/M1w234/voiceling.git
+cd voiceling
 ./scripts/fetch-models.sh
 ./scripts/dev-build.sh
 ```

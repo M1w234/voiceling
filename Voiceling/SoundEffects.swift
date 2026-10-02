@@ -91,7 +91,7 @@ enum SoundEffect {
     }
 
     /// Names of custom chimes shipped inside the app bundle (synthesized
-    /// Yapr set + imported ones). Shown as their own section in the picker.
+    /// Voiceling set + imported ones). Shown as their own section in the picker.
     nonisolated static func bundledSounds() -> [String] {
         var names: Set<String> = []
         for dir in bundledSoundDirs() {

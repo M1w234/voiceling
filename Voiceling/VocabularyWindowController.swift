@@ -400,7 +400,7 @@ private struct VocabularyEditor: View {
                     .onSubmit(onSave)
             }
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("Yapr heard")
+                Text("Voiceling heard")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(width: 74, alignment: .leading)

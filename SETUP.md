@@ -12,7 +12,7 @@ later. This build does not run on Intel Macs.
 ## Easiest install
 
 Download the `.dmg` from the
-[latest release](https://github.com/M1w234/yaprflow-mw/releases/latest), open
+[latest release](https://github.com/M1w234/voiceling/releases/latest), open
 it, and drag **Voiceling** to **Applications**. Then continue at Step 2 below for
 the one-time macOS permissions.
 
@@ -20,7 +20,7 @@ the one-time macOS permissions.
 
 Open Claude Code (or Codex) anywhere, and say:
 
-> Read SETUP.md from https://github.com/M1w234/yaprflow-mw and set up Voiceling on my Mac — do the command-line steps for me and walk me through the permission clicks. Adapt to whatever macOS shows.
+> Read SETUP.md from https://github.com/M1w234/voiceling and set up Voiceling on my Mac — do the command-line steps for me and walk me through the permission clicks. Adapt to whatever macOS shows.
 
 The agent then follows the steps below. (You can also just do them yourself.)
 
@@ -35,7 +35,7 @@ No building required — grab the ready-to-run disk image from the latest releas
 ```bash
 cd ~/Downloads
 curl -L -o Voiceling.dmg \
-  https://github.com/M1w234/yaprflow-mw/releases/latest/download/Voiceling.dmg
+  https://github.com/M1w234/voiceling/releases/latest/download/Voiceling.dmg
 open Voiceling.dmg
 ```
 

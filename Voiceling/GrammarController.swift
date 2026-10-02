@@ -244,7 +244,7 @@ final class GrammarController {
     static let correctionModelID = "mlx-community/Qwen2.5-1.5B-Instruct-4bit"
     static let correctionPromptVersion = "minimal-copyedit-v1"
 
-    private let modelURL = URL(string: "https://github.com/tmoreton/yaprflow/releases/download/v0.1.0-grammar-model/qwen25-1.5b-4bit-mlx.tar.gz")!
+    private let modelURL = URL(string: "https://github.com/M1w234/voiceling/releases/download/models-v1/qwen25-1.5b-4bit-mlx.tar.gz")!
     private let modelDirName = "grammar-model-qwen25-1.5b"
 
     private var modelContainer: ModelContainer?

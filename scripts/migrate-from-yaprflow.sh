@@ -43,9 +43,10 @@ if [ -f "$OLD_PREFS.plist" ]; then
         cp "$NEW_PREFS.plist" "$NEW_PREFS.pre-migration-$STAMP.plist"
     fi
     # `defaults export` emits an XML plist; string values are entity-escaped,
-    # so only real <key> elements can match.
+    # so the first rule only matches real <key> elements. The second carries
+    # over a saved bundled-chime choice ("Yapr Bell" -> "Voiceling Bell").
     defaults export "$OLD_PREFS" - \
-        | sed 's|<key>yaprflow\.|<key>voiceling.|' \
+        | sed -e 's|<key>yaprflow\.|<key>voiceling.|' -e 's|<string>Yapr |<string>Voiceling |' \
         | defaults import "$NEW_PREFS" -
     echo "    $(defaults read "$NEW_PREFS" | grep -c '"voiceling\.') settings copied"
 else

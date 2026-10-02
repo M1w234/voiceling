@@ -1027,7 +1027,7 @@ final class TranscriptionController {
     ]
 
     private static let encoderDownloadURL = URL(string:
-        "https://github.com/tmoreton/yaprflow/releases/download/models-v2/parakeet-v2-encoder.tar.gz"
+        "https://github.com/M1w234/voiceling/releases/download/models-v1/parakeet-v2-encoder.tar.gz"
     )!
 
     /// Full bundle (dev builds with the encoder still in the repo). If every

@@ -86,7 +86,7 @@ fi
 APPLE_TEAM_ID="${APPLE_TEAM_ID:-QFHS76RR9M}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-notary-yaprflow-mw}"
 CODESIGN_IDENTITY="${DEVELOPER_ID_APPLICATION:-17530C078CB507252BC9CB8EEAA9143310583C56}"
-GH_REPO="${GH_REPO:-M1w234/yaprflow-mw}"
+GH_REPO="${GH_REPO:-M1w234/voiceling}"
 
 read_marketing_version() {
     xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration "$CONFIGURATION" \
