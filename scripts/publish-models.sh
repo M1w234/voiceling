@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Packages the two downloadable models and uploads them to the 'models-v1'
-# GitHub Release, which the app downloads from when a piece is missing:
+# GitHub Release (a pre-release, so /releases/latest stays the app DMG),
+# which the app downloads from when a piece is missing:
 #   parakeet-v2-encoder.tar.gz   Encoder.mlmodelc (~445MB) from
 #                                FluidInference/parakeet-tdt-0.6b-v2-coreml
 #                                (release builds bundle it; this is the fallback)
@@ -66,7 +67,7 @@ else
     gh release create "$MODELS_TAG" "$STAGE/$ENCODER_TARBALL" "$STAGE/$GRAMMAR_TARBALL" \
         --repo "$REPO_SLUG" \
         --title "Models v1" \
-        --latest=false \
+        --prerelease \
         --notes "$NOTES"
 fi
 
