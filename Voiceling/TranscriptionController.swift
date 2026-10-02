@@ -328,6 +328,11 @@ final class TranscriptionController {
     /// if the user presses-and-releases during start()'s async warmup, start()
     /// observes desiredActive == false post-await and bails out cleanly.
     func setActive(_ active: Bool) {
+        if active, !LicenseManager.shared.canDictate {
+            desiredActive = false
+            LicenseManager.shared.presentTrialEnded()
+            return
+        }
         desiredActive = active
         Task { @MainActor in
             if active {

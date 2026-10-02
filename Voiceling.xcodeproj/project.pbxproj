@@ -151,6 +151,7 @@
 				"$(SRCROOT)/Models",
 				"$(SRCROOT)/LICENSE",
 				"$(SRCROOT)/NOTICE",
+				"$(SRCROOT)/THIRD_PARTY_NOTICES.md",
 			);
 			name = "Copy Models and Notices";
 			outputFileListPaths = (
@@ -159,10 +160,11 @@
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Models",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/LICENSE",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/NOTICE",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/THIRD_PARTY_NOTICES.md",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\nSRC=\"$SRCROOT/Models\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Models\"\nif [ -d \"$SRC\" ]; then\n  mkdir -p \"$DEST\"\n  rsync -a --delete --exclude '.cache' --exclude '.DS_Store' \"$SRC/\" \"$DEST/\"\nelse\n  echo \"warning: Models/ missing — run scripts/fetch-models.sh\"\nfi\n# Apache-2.0 and model licences travel with the binary.\ncp \"$SRCROOT/LICENSE\" \"$SRCROOT/NOTICE\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/\"\n";
+			shellScript = "set -e\nSRC=\"$SRCROOT/Models\"\nDEST=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Models\"\nif [ -d \"$SRC\" ]; then\n  mkdir -p \"$DEST\"\n  rsync -a --delete --exclude '.cache' --exclude '.DS_Store' \"$SRC/\" \"$DEST/\"\nelse\n  echo \"warning: Models/ missing — run scripts/fetch-models.sh\"\nfi\n# Apache-2.0 and model licences travel with the binary.\ncp \"$SRCROOT/LICENSE\" \"$SRCROOT/NOTICE\" \"$SRCROOT/THIRD_PARTY_NOTICES.md\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

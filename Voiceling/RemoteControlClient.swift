@@ -56,6 +56,7 @@ final class RemoteControlClient: ObservableObject {
             guard accepted, !Task.isCancelled else { return }
             isConnected = true
             remoteLog.info("Deskling bridge connected")
+            LicenseManager.shared.noteDesklingConnected()
         }
 
         let published = await publishStatus()

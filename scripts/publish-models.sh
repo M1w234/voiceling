@@ -38,7 +38,7 @@ if ! command -v gh >/dev/null 2>&1; then
     exit 1
 fi
 
-# Each tarball carries its model's licence terms next to the files.
+# Each tarball carries its model's license terms next to the files.
 mkdir -p "$STAGE/encoder-extra" "$STAGE/grammar-extra"
 cat > "$STAGE/encoder-extra/NOTICE" <<'NOTE'
 Encoder.mlmodelc is part of NVIDIA Parakeet TDT 0.6B v2
@@ -70,7 +70,7 @@ NOTES="Model files Voiceling downloads when they are not already in the app.
 - \`$ENCODER_TARBALL\`: Encoder.mlmodelc from [FluidInference/parakeet-tdt-0.6b-v2-coreml](https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v2-coreml), a Core ML conversion of [NVIDIA Parakeet TDT 0.6B v2](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2). License: CC BY 4.0.
 - \`$GRAMMAR_TARBALL\`: [mlx-community/Qwen2.5-1.5B-Instruct-4bit](https://huggingface.co/mlx-community/Qwen2.5-1.5B-Instruct-4bit), an MLX conversion of [Qwen2.5-1.5B-Instruct](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) by the Qwen team. License: Apache 2.0.
 
-Files are unmodified and repackaged as tarballs, each with its licence notice.
+Files are unmodified and repackaged as tarballs, each with its license notice.
 
 SHA-256:
 \`\`\`

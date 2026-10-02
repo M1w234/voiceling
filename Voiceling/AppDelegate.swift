@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        LicenseManager.shared.revalidateIfDue()
         installStatusItem()
         cleanupModeCancellable = AppState.shared.$cleanupMode
             .receive(on: RunLoop.main)
@@ -109,6 +110,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     @objc private func showSetup() {
         OnboardingWindowController.shared.show()
+    }
+
+    @objc private func showLicense() {
+        LicenseWindowController.shared.show()
     }
 
     /// Re-launching or re-opening the app (Spotlight, double-click in Finder,
@@ -294,6 +299,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         menu.addItem(vocabularyItem)
 
         menu.addItem(NSMenuItem.separator())
+
+        let licenseItem = NSMenuItem()
+        licenseItem.view = IconActionMenuItemView(
+            symbolName: "key",
+            title: "License…",
+            target: self,
+            action: #selector(showLicense)
+        )
+        licenseItem.toolTip = "Your free trial, license key, or Deskling inclusion."
+        menu.addItem(licenseItem)
 
         let setupItem = NSMenuItem()
         setupItem.view = IconActionMenuItemView(
