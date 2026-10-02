@@ -85,4 +85,4 @@ echo "==> Launching…"
 open "$DEST"
 
 echo ""
-echo "✅ Done. Look for the waveform icon in the menu bar."
+echo "✅ Done. Look for the Voiceling icon in the menu bar."

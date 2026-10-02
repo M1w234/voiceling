@@ -1,26 +1,22 @@
+import CryptoKit
 import Foundation
 
 /// Voiceling is $5.99 once, free with a Deskling, after a 7-day trial.
-/// Pure rules only (no storage, network or UI) so they can be tested on their own;
+/// Pure rules only (no storage or UI) so they can be tested on their own;
 /// `LicenseManager` applies them.
 enum LicenseConfig {
-    /// Lemon Squeezy store and product that issue Voiceling keys. 0 until the store exists,
-    /// which keeps activation off and the Buy button disabled.
-    static let storeID = 0
-    static let productID = 0
+    /// Ed25519 public key that verifies license keys. The private half signs a key after a
+    /// paid Stripe checkout on the Deskling site and never enters this repository.
+    static let publicKey = Data(base64Encoded: "dO0F70peudpqiHiFKYq3nxt2Ix6VvSIJPGmERLKMzow=")!
+    /// The Stripe Payment Link. nil until it exists, which keeps the Buy button disabled.
     static let checkoutURL: URL? = nil
     static let price = "$5.99"
     static let trialDays = 7
-    /// A license is re-checked at most this often, and only when online. Being offline never
-    /// locks out a paid license: only an explicit "not valid" answer does.
-    static let revalidateAfterDays = 7
 }
 
 struct LicenseRecord: Codable, Equatable {
     var trialStarted: Date
     var licenseKey: String?
-    var instanceID: String?
-    var lastValidated: Date?
     /// Set the first time this Mac's Deskling service accepts Voiceling. Kept, so the app
     /// doesn't relock while the desk display is away or the service is restarting.
     var desklingSeen: Date?
@@ -35,66 +31,47 @@ enum LicenseStatus: Equatable {
     var canDictate: Bool { self != .expired }
 }
 
-/// The subset of Lemon Squeezy's license API response that Voiceling reads
-/// (`/v1/licenses/activate`, `/validate`, `/deactivate`).
-struct LicenseAPIResponse: Decodable {
-    struct Key: Decodable { let status: String? }
-    struct Instance: Decodable { let id: String? }
-    struct Meta: Decodable {
-        let storeId: Int?
-        let productId: Int?
-    }
-    let activated: Bool?
-    let valid: Bool?
-    let deactivated: Bool?
-    let error: String?
-    let licenseKey: Key?
-    let instance: Instance?
-    let meta: Meta?
+/// A license key is `VL1-` + base64url(payload ‖ Ed25519 signature). The 17-byte payload is
+/// version (1), the purchase day (UInt32, days since 1970, big-endian) and 12 bytes of
+/// SHA-256 over the purchase reference. Keys are checked on this Mac; nothing goes online.
+struct LicenseKey: Equatable {
+    static let prefix = "VL1-"
+    static let signingDomain = Data("VOICELING-LICENSE-V1".utf8)
+    static let payloadLength = 17
 
-    static func decode(_ data: Data) throws -> LicenseAPIResponse {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(LicenseAPIResponse.self, from: data)
-    }
-}
+    let issuedDay: UInt32
+    let purchaseRef: Data
 
-enum LicenseCheck: Equatable {
-    case accepted(instanceID: String?)
-    /// A key from another Lemon Squeezy store or product.
-    case wrongProduct
-    case rejected(message: String)
+    /// Parses and verifies a pasted key; spaces and line breaks are ignored.
+    static func verify(_ text: String, publicKey: Data = LicenseConfig.publicKey) -> LicenseKey? {
+        let compact = text.filter { !$0.isWhitespace }
+        guard compact.hasPrefix(prefix) else { return nil }
+        var base64 = String(compact.dropFirst(prefix.count))
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while base64.count % 4 != 0 { base64 += "=" }
+        guard let blob = Data(base64Encoded: base64), blob.count == payloadLength + 64 else { return nil }
+        let payload = Data(blob.prefix(payloadLength))
+        let signature = Data(blob.suffix(64))
+        guard payload[0] == 1,
+              let key = try? Curve25519.Signing.PublicKey(rawRepresentation: publicKey),
+              key.isValidSignature(signature, for: signingDomain + payload) else { return nil }
+        let day = payload[1...4].reduce(UInt32(0)) { $0 << 8 | UInt32($1) }
+        return LicenseKey(issuedDay: day, purchaseRef: Data(payload[5...]))
+    }
 }
 
 enum LicensePolicy {
-    static func status(_ record: LicenseRecord, now: Date, trialDays: Int = LicenseConfig.trialDays) -> LicenseStatus {
+    static func status(_ record: LicenseRecord, now: Date,
+                       publicKey: Data = LicenseConfig.publicKey,
+                       trialDays: Int = LicenseConfig.trialDays) -> LicenseStatus {
         if record.desklingSeen != nil { return .includedWithDeskling }
-        if record.licenseKey != nil, record.instanceID != nil { return .licensed }
+        if let key = record.licenseKey, LicenseKey.verify(key, publicKey: publicKey) != nil {
+            return .licensed
+        }
         // A clock set backwards counts as day zero rather than extending the trial.
         let elapsed = max(0, now.timeIntervalSince(record.trialStarted))
-        let daysUsed = Int(elapsed / 86_400)
-        let daysLeft = trialDays - daysUsed
+        let daysLeft = trialDays - Int(elapsed / 86_400)
         return daysLeft > 0 ? .trial(daysLeft: daysLeft) : .expired
-    }
-
-    static func needsRevalidation(_ record: LicenseRecord, now: Date,
-                                  after days: Int = LicenseConfig.revalidateAfterDays) -> Bool {
-        guard record.licenseKey != nil, record.instanceID != nil else { return false }
-        guard let last = record.lastValidated else { return true }
-        return now.timeIntervalSince(last) >= Double(days) * 86_400
-    }
-
-    /// Judges an activate or validate answer. The store and product must match, so a key
-    /// sold for some other Lemon Squeezy product can't unlock Voiceling.
-    static func check(_ response: LicenseAPIResponse, storeID: Int = LicenseConfig.storeID,
-                      productID: Int = LicenseConfig.productID) -> LicenseCheck {
-        let ok = response.activated ?? response.valid ?? false
-        guard ok else {
-            return .rejected(message: response.error ?? "That license key isn't valid.")
-        }
-        guard response.meta?.storeId == storeID, response.meta?.productId == productID else {
-            return .wrongProduct
-        }
-        return .accepted(instanceID: response.instance?.id)
     }
 }

@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        LicenseManager.shared.revalidateIfDue()
+        LicenseManager.shared.refresh()
         installStatusItem()
         cleanupModeCancellable = AppState.shared.$cleanupMode
             .receive(on: RunLoop.main)
@@ -114,6 +114,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
 
     @objc private func showLicense() {
         LicenseWindowController.shared.show()
+    }
+
+    /// voiceling://activate?key=… from the purchase page.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        urls.forEach { LicenseManager.shared.handle(url: $0) }
     }
 
     /// Re-launching or re-opening the app (Spotlight, double-click in Finder,

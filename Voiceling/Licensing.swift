@@ -6,15 +6,17 @@ import SwiftUI
 
 private let log = Logger(subsystem: "com.teamwong.voiceling", category: "License")
 
-/// Trial, Deskling inclusion and Lemon Squeezy license keys. The rules live in
-/// LicensePolicy.swift; this applies them, stores the record and talks to the license API.
-/// The only network traffic is a license key check; audio and text never leave the Mac.
+/// Trial, Deskling inclusion and signed license keys. The rules live in LicensePolicy.swift;
+/// this applies them and stores the record. Keys are verified on this Mac, so licensing
+/// never goes online.
 @MainActor
 final class LicenseManager: ObservableObject {
     static let shared = LicenseManager()
 
     @Published private(set) var status: LicenseStatus
     @Published private(set) var record: LicenseRecord
+    /// The outcome of an activation that arrived through a voiceling:// link.
+    @Published var notice: String?
 
     private init() {
         let record = LicenseStorage.load() ?? LicenseRecord(trialStarted: Date())
@@ -33,24 +35,6 @@ final class LicenseManager: ObservableObject {
         if next != status { status = next }
     }
 
-    /// Re-checks a stored key in the background when it is due. Never locks out offline users.
-    func revalidateIfDue() {
-        guard LicensePolicy.needsRevalidation(record, now: Date()),
-              let key = record.licenseKey else { return }
-        Task {
-            var form = ["license_key": key]
-            if let instance = record.instanceID { form["instance_id"] = instance }
-            guard let response = try? await Self.post("validate", form) else { return }
-            switch LicensePolicy.check(response) {
-            case .accepted:
-                update { $0.lastValidated = Date() }
-            case .rejected, .wrongProduct:
-                log.notice("Stored license is no longer valid; returning to trial rules")
-                update { $0.licenseKey = nil; $0.instanceID = nil; $0.lastValidated = nil }
-            }
-        }
-    }
-
     /// Called when this Mac's Deskling service accepts Voiceling. Voiceling is free with a Deskling.
     func noteDesklingConnected() {
         guard record.desklingSeen == nil else { return }
@@ -59,45 +43,24 @@ final class LicenseManager: ObservableObject {
     }
 
     /// Returns nil on success, or a message to show.
-    func activate(key rawKey: String) async -> String? {
-        let key = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return "Enter your license key." }
-        guard LicenseConfig.storeID != 0 else { return "Voiceling licenses aren't on sale yet." }
-        let response: LicenseAPIResponse
-        do {
-            response = try await Self.post("activate", ["license_key": key, "instance_name": "Voiceling for Mac"])
-        } catch {
-            return "Couldn't reach the license server. Check your connection and try again."
+    func activate(key rawKey: String) -> String? {
+        let key = rawKey.filter { !$0.isWhitespace }
+        guard !key.isEmpty else { return "Paste your license key." }
+        guard LicenseKey.verify(key) != nil else {
+            return "That isn't a valid Voiceling license key. Copy it again from your purchase page."
         }
-        switch LicensePolicy.check(response) {
-        case .accepted(let instanceID):
-            guard let instanceID else { return "The license server didn't confirm this Mac. Try again." }
-            update { $0.licenseKey = key; $0.instanceID = instanceID; $0.lastValidated = Date() }
-            return nil
-        case .wrongProduct:
-            // Free the activation slot this created on someone else's product.
-            if let id = response.instance?.id {
-                _ = try? await Self.post("deactivate", ["license_key": key, "instance_id": id])
-            }
-            return "That key isn't for Voiceling."
-        case .rejected(let message):
-            return message
-        }
+        update { $0.licenseKey = key }
+        log.info("License key activated")
+        return nil
     }
 
-    /// Frees this Mac's activation so the key can move to another Mac.
-    func deactivate() async -> String? {
-        guard let key = record.licenseKey, let instance = record.instanceID else { return nil }
-        do {
-            let response = try await Self.post("deactivate", ["license_key": key, "instance_id": instance])
-            guard response.deactivated == true else {
-                return response.error ?? "Couldn't deactivate this Mac. Try again."
-            }
-        } catch {
-            return "Couldn't reach the license server. Check your connection and try again."
-        }
-        update { $0.licenseKey = nil; $0.instanceID = nil; $0.lastValidated = nil }
-        return nil
+    /// Handles voiceling://activate?key=… from the purchase page.
+    func handle(url: URL) {
+        guard url.scheme == "voiceling", url.host == "activate",
+              let key = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "key" })?.value else { return }
+        notice = activate(key: key) ?? "Voiceling is activated. Thank you!"
+        LicenseWindowController.shared.show()
     }
 
     /// Shown when a shortcut is pressed after the trial has ended. Nothing records.
@@ -118,22 +81,6 @@ final class LicenseManager: ObservableObject {
         change(&record)
         LicenseStorage.save(record)
         refresh()
-    }
-
-    private static func post(_ action: String, _ form: [String: String]) async throws -> LicenseAPIResponse {
-        var request = URLRequest(url: URL(string: "https://api.lemonsqueezy.com/v1/licenses/\(action)")!)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 15
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        var allowed = CharacterSet.urlQueryAllowed
-        allowed.remove(charactersIn: "&=+")
-        request.httpBody = form
-            .map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed) ?? "")" }
-            .joined(separator: "&")
-            .data(using: .utf8)
-        let (data, _) = try await URLSession.shared.data(for: request)
-        return try LicenseAPIResponse.decode(data)
     }
 }
 
@@ -217,7 +164,6 @@ final class LicenseWindowController: NSWindowController, NSWindowDelegate {
 struct LicenseView: View {
     @ObservedObject private var manager = LicenseManager.shared
     @State private var keyDraft = ""
-    @State private var busy = false
     @State private var message: String?
 
     var body: some View {
@@ -239,9 +185,7 @@ struct LicenseView: View {
             case .includedWithDeskling:
                 EmptyView()
             case .licensed:
-                Button("Deactivate on This Mac…") { run { await manager.deactivate() } }
-                    .disabled(busy)
-                    .help("Frees this Mac's activation so you can use your key on another Mac.")
+                EmptyView()
             case .trial, .expired:
                 Button {
                     if let url = LicenseConfig.checkoutURL { NSWorkspace.shared.open(url) }
@@ -257,16 +201,18 @@ struct LicenseView: View {
                         .textFieldStyle(.roundedBorder)
                         .onSubmit(activate)
                     Button("Activate", action: activate)
-                        .disabled(busy || keyDraft.trimmingCharacters(in: .whitespaces).isEmpty)
+                        .disabled(keyDraft.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
 
-            if busy { ProgressView().controlSize(.small) }
-            if let message {
-                Text(message).font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+            if let message = message ?? manager.notice {
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(manager.status == .licensed ? Color.secondary : Color.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            Text("Voiceling only goes online to activate or check a license key. Your audio and words never leave this Mac.")
+            Text("License keys are checked on this Mac. Voiceling never goes online for licensing, and your audio and words never leave this Mac.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -289,27 +235,15 @@ struct LicenseView: View {
     private var subtitle: String {
         switch manager.status {
         case .includedWithDeskling: return "Voiceling is yours. No license needed."
-        case .licensed: return "Thank you for buying Voiceling."
+        case .licensed: return "Thank you for buying Voiceling. Your key works on all your Macs."
         case .trial: return "Then \(LicenseConfig.price), once. Free with any Deskling."
         case .expired: return "Keep dictating for \(LicenseConfig.price), once. Free with any Deskling."
         }
     }
 
     private func activate() {
-        let key = keyDraft
-        run {
-            let error = await manager.activate(key: key)
-            if error == nil { keyDraft = "" }
-            return error
-        }
-    }
-
-    private func run(_ action: @escaping @MainActor () async -> String?) {
-        busy = true
-        message = nil
-        Task { @MainActor in
-            message = await action()
-            busy = false
-        }
+        manager.notice = nil
+        message = manager.activate(key: keyDraft)
+        if message == nil { keyDraft = "" }
     }
 }
