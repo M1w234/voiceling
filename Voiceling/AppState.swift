@@ -277,8 +277,8 @@ final class AppState: ObservableObject {
     /// True when an earlier run (or a migration) saved delivery settings, so
     /// onboarding only repairs permissions instead of resetting choices.
     static var hasSavedPreferences: Bool {
-        UserDefaults.standard.object(forKey: cleanupModeKey) != nil
-            || UserDefaults.standard.object(forKey: grammarModeKey) != nil
+        [cleanupModeKey, grammarModeKey, streamingModeKey, autoPasteModeKey]
+            .contains { UserDefaults.standard.object(forKey: $0) != nil }
     }
 
     private init() {

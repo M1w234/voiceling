@@ -124,6 +124,7 @@ final class ModifierOnlyHotkey {
     /// every retry tick. Keep the two grants separate so fixing Accessibility
     /// can reveal and explain a stale Input Monitoring entry afterwards.
     private var shownPermissionGuidance: Set<PermissionGuidance> = []
+    private var permissionGuidanceGeneration = 0
 
     private init() {}
 
@@ -272,8 +273,12 @@ final class ModifierOnlyHotkey {
 
         AppState.shared.status = .error(message)
         NotchOverlayWindowController.shared.show()
+        permissionGuidanceGeneration += 1
+        let generation = permissionGuidanceGeneration
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(6))
+            // A later message (e.g. Input Monitoring after Accessibility) owns the overlay now.
+            guard generation == self.permissionGuidanceGeneration else { return }
             if case .error = AppState.shared.status {
                 AppState.shared.status = .idle
                 NotchOverlayWindowController.shared.hide()

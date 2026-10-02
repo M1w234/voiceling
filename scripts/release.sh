@@ -409,8 +409,18 @@ ls -lh "$DMG_PATH"
 
 if [[ "$PUBLISH" == true ]]; then
     echo
-    if git rev-parse "$TAG" >/dev/null 2>&1; then
-        echo "==> Tag $TAG already exists locally — skipping create"
+    HEAD_SHA="$(git rev-parse HEAD)"
+    TAG_REMOTE="https://github.com/${GH_REPO}.git"
+    # This repository still holds Yaprflow's version tags, so a same-named tag
+    # may belong to a different project. Only reuse a tag that points at HEAD.
+    if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+        LOCAL_TAG_SHA="$(git rev-parse "$TAG^{commit}")"
+        if [[ "$LOCAL_TAG_SHA" != "$HEAD_SHA" ]]; then
+            echo "error: local tag $TAG points at $LOCAL_TAG_SHA, not HEAD ($HEAD_SHA)." >&2
+            echo "       If it is an inherited Yaprflow tag, rename it: git tag yaprflow-$TAG $TAG && git tag -d $TAG" >&2
+            exit 1
+        fi
+        echo "==> Tag $TAG already exists locally at HEAD — skipping create"
     else
         echo "==> Tagging $TAG"
         git tag -a "$TAG" -m "Voiceling $VERSION"
@@ -418,9 +428,14 @@ if [[ "$PUBLISH" == true ]]; then
 
     # Push the tag to the repository the release is published on, which is not
     # necessarily this checkout's origin.
-    TAG_REMOTE="https://github.com/${GH_REPO}.git"
-    if git ls-remote --tags "$TAG_REMOTE" "$TAG" 2>/dev/null | grep -q "refs/tags/$TAG"; then
-        echo "==> Tag $TAG already on $GH_REPO — skipping push"
+    REMOTE_TAG_SHA="$(git ls-remote --tags "$TAG_REMOTE" "refs/tags/$TAG^{}" "refs/tags/$TAG" 2>/dev/null \
+        | awk '{print $1}' | tail -1)"
+    if [[ -n "$REMOTE_TAG_SHA" ]]; then
+        if [[ "$REMOTE_TAG_SHA" != "$HEAD_SHA" ]]; then
+            echo "error: $TAG on $GH_REPO points at $REMOTE_TAG_SHA, not HEAD ($HEAD_SHA)." >&2
+            exit 1
+        fi
+        echo "==> Tag $TAG already on $GH_REPO at HEAD — skipping push"
     else
         git push "$TAG_REMOTE" "$TAG"
     fi
