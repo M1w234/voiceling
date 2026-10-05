@@ -52,6 +52,8 @@ internal static class UiSmoke
                 licenseKey.Text = "invalid"; activate.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 if (!All<TextBlock>(licenseWindow).Any(text => text.Text.Contains("That key is not valid", StringComparison.Ordinal)))
                     throw new InvalidOperationException("Invalid key feedback was not rendered.");
+                licenseWindow.UpdateLayout();
+                await licenseWindow.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
                 var image = new RenderTargetBitmap((int)licenseWindow.ActualWidth, (int)licenseWindow.ActualHeight, 96, 96, PixelFormats.Pbgra32);
                 image.Render(licenseWindow);
                 var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(image));
