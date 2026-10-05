@@ -6,7 +6,7 @@ namespace Voiceling.Core;
 /// Outbound loopback relay client. Device audio arrives encrypted; transcripts stay local.
 /// The caller owns the synchronization context; commands must not await recognition.
 public sealed class DesklingBridge(HttpClient http, Func<string> state, Action<string> command, Action disconnected,
-    Action<string, string>? audioCommand = null, Action<string, float[]>? audioReceived = null)
+    Action<string, string>? audioCommand = null, Action<string, float[]>? audioReceived = null, Action? connected = null)
 {
     private string routePrefix = "http://127.0.0.1:8737/api/voiceling/";
     private byte[]? audioKey;
@@ -38,7 +38,9 @@ public sealed class DesklingBridge(HttpClient http, Func<string> state, Action<s
             using var response = await http.GetAsync($"{routePrefix}command?client={client}&after={acknowledged}", token);
             response.EnsureSuccessStatusCode();
             using var body = await ReadAsync(response, token);
+            var becameConnected = !Connected;
             Connected = true;
+            if (becameConnected) connected?.Invoke();
             if (!body.RootElement.TryGetProperty("command", out var row) || row.ValueKind == JsonValueKind.Null) return;
             if (row.ValueKind != JsonValueKind.Object || !row.TryGetProperty("seq", out var sequence) ||
                 !sequence.TryGetInt64(out var seq) || seq <= acknowledged ||

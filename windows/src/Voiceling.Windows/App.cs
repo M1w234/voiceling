@@ -12,6 +12,7 @@ internal sealed class App : Application
     private Mutex? instance;
     private Mutex? legacyInstance;
     private AppController? controller;
+    private ActivationPipe? activationPipe;
     [STAThread]
     public static void Main()
     {
@@ -22,7 +23,13 @@ internal sealed class App : Application
     {
         base.OnStartup(e);
         instance = new Mutex(true, "Local\\TeamWong.Voiceling.Windows", out var first);
-        if (!first) { MessageBox.Show("voiceling is already running. Open it from the system tray.", "voiceling"); Shutdown(); return; }
+        if (!first)
+        {
+            var url = e.Args.FirstOrDefault(value => LicensePolicy.ActivationKey(value) is not null);
+            if (url is null || !ActivationPipe.SendAsync(url).GetAwaiter().GetResult())
+                MessageBox.Show("Voiceling is already running. Open License from Settings to paste your key.", "Voiceling");
+            Shutdown(); return;
+        }
         legacyInstance = new Mutex(true, "Local\\TeamWong.YaprFlow.Windows", out var oldStopped);
         if (!oldStopped) { MessageBox.Show("Close the former dictation app before opening Voiceling.", "Voiceling"); Shutdown(); return; }
         try
@@ -32,10 +39,12 @@ internal sealed class App : Application
             var directory = smokeDirectory is null
                 ? DataMigration.EnsureDirectory(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData))
                 : Path.Combine(Path.GetTempPath(), "voiceling-smoke-" + Guid.NewGuid().ToString("N"));
-            controller = new AppController(directory);
+            controller = new AppController(directory, smokeDirectory is not null);
             MainWindow = controller.Window;
             if (smokeDirectory is null) MigrateLegacyStartup();
             if (smokeDirectory is not null) { _ = UiSmoke.RunAsync(controller, smokeDirectory); return; }
+            activationPipe = new ActivationPipe(controller.HandleActivation);
+            foreach (var argument in e.Args) controller.HandleActivation(argument);
             if (!e.Args.Contains("--background") || !controller.Installer.IsInstalled) controller.Show();
             controller.StartDeskling();
             _ = controller.WarmupAsync();
@@ -61,7 +70,7 @@ internal sealed class App : Application
         key.DeleteValue("YaprFlow", throwOnMissingValue: false);
     }
 
-    protected override void OnExit(ExitEventArgs e) { controller?.Dispose(); instance?.Dispose(); legacyInstance?.Dispose(); base.OnExit(e); }
+    protected override void OnExit(ExitEventArgs e) { activationPipe?.Dispose(); controller?.Dispose(); instance?.Dispose(); legacyInstance?.Dispose(); base.OnExit(e); }
 }
 
 internal sealed class AppController : IDisposable
@@ -95,9 +104,33 @@ internal sealed class AppController : IDisposable
     private string? deviceAudioSession;
     private bool remoteRecording;
     private bool desktopLocked;
+    public LicenseManager License { get; }
+    private LicenseWindow? licenseWindow;
+    public void ShowLicense()
+    {
+        if (licenseWindow is null)
+        {
+            licenseWindow = new LicenseWindow(License) { Owner = Window };
+            licenseWindow.Closed += (_, _) => { licenseWindow = null; if (Window.IsVisible) Window.Activate(); };
+        }
+        licenseWindow.Show(); licenseWindow.Activate();
+    }
+    public void HandleActivation(string url)
+    {
+        var key = LicensePolicy.ActivationKey(url);
+        if (key is null) return;
+        SetNotice(License.Activate(key) ?? "Voiceling is activated. Thank you!");
+        ShowLicense();
+    }
+    private bool EnsureLicense()
+    {
+        if (License.CanDictate) return true;
+        SetNotice("Your trial has ended. Activate Voiceling to continue dictating.");
+        ShowLicense(); return false;
+    }
     public void StartDeskling()
     {
-        var bridge = new DesklingBridge(desklingHttp, () => !ModelReady || ModelBusy || desktopLocked ? "error" : Session.Phase switch
+        var bridge = new DesklingBridge(desklingHttp, () => !License.CanDictate || !ModelReady || ModelBusy || desktopLocked ? "error" : Session.Phase switch
         {
             SessionPhase.Preparing => "preparing", SessionPhase.Listening => "listening",
             SessionPhase.Transcribing or SessionPhase.Canceling => "processing", _ => "idle"
@@ -106,12 +139,18 @@ internal sealed class AppController : IDisposable
             {
                 if (action == "audio_cancel")
                 { if (deviceAudioSession == id) { deviceAudioSession = null; _ = Session.CancelAsync(); } return; }
-                if (exiting || desktopLocked || !ModelReady || ModelBusy || Session.IsBusy) return;
+                if (exiting || desktopLocked || !ModelReady || ModelBusy || Session.IsBusy || !EnsureLicense()) return;
                 holdOwner = null; remoteRecording = true; deviceAudioSession = id;
                 _ = Session.StartExternalAsync();
             },
             (id, samples) => { if (deviceAudioSession == id && !desktopLocked && !exiting)
-                { deviceAudioSession = null; _ = Session.CompleteExternalAsync(samples); } });
+                { deviceAudioSession = null; _ = Session.CompleteExternalAsync(samples); } },
+            () =>
+            {
+                try { License.NoteDesklingConnected(); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
+                { SetNotice("Deskling connected, but its included license could not be saved. Open License and try again."); }
+            });
         _ = bridge.RunAsync(desklingCancellation.Token);
     }
     private void RemoteCommand(string command)
@@ -120,7 +159,7 @@ internal sealed class AppController : IDisposable
         if (command == "cancel") { remoteRecording = false; _ = Session.CancelAsync(); return; }
         if (command == "stop" || command == "toggle_lock" && Session.IsBusy)
         { _ = Session.FinishAsync(); return; }
-        if ((command is "start" or "toggle_lock") && ModelReady && !ModelBusy && !Session.IsBusy)
+        if ((command is "start" or "toggle_lock") && ModelReady && !ModelBusy && !Session.IsBusy && EnsureLicense())
         { holdOwner = null; remoteRecording = true; _ = Session.StartAsync(); }
     }
     public Settings Settings { get; private set; }
@@ -138,9 +177,11 @@ internal sealed class AppController : IDisposable
     public double ModelProgress { get; private set; }
     public event Action? Changed;
 
-    public AppController(string directory)
+    public AppController(string directory, bool isolatedLicense = false)
     {
         store = new(directory);
+        License = new(directory, isolatedLicense);
+        License.Changed += () => Changed?.Invoke();
         sounds = new RecordingSounds(Path.Combine(directory, "sounds"));
         Settings = store.Read("settings.json", () => new Settings());
         Settings.Validate();
@@ -166,7 +207,7 @@ internal sealed class AppController : IDisposable
             if (!Suggestions.Contains(rule) && Suggestions.Count < 20 && !Vocabulary.Contains(rule))
             { Suggestions.Add(rule); SetNotice("A possible correction is ready to review in Vocabulary."); }
         };
-        Session = new(microphone, recognizer, delivery, () => Settings, () => Vocabulary, polisher: polisher);
+        Session = new(microphone, recognizer, delivery, () => Settings, () => Vocabulary, polisher: polisher, canStart: EnsureLicense);
         overlay = new OverlayWindow(() => _ = Session.CancelAsync(), () => _ = Session.FinishAsync());
         Window = new MainWindow(this);
         tray = new Forms.NotifyIcon
@@ -176,6 +217,7 @@ internal sealed class AppController : IDisposable
         };
         var menu = new Forms.ContextMenuStrip();
         menu.Items.Add("Open voiceling", null, (_, _) => Show());
+        menu.Items.Add("License", null, (_, _) => ShowLicense());
         menu.Items.Add("Finish dictation", null, (_, _) => _ = Session.FinishAsync());
         menu.Items.Add("Cancel dictation", null, (_, _) => _ = Session.CancelAsync());
         menu.Items.Add(new Forms.ToolStripSeparator());
@@ -199,7 +241,7 @@ internal sealed class AppController : IDisposable
         {
             if (action is GestureAction.StartHold or GestureAction.StartLocked)
             {
-                if (ModelBusy || !ModelReady || Session.IsBusy) { gestures.Reset(); return; }
+                if (ModelBusy || !ModelReady || Session.IsBusy || !EnsureLicense()) { gestures.Reset(); return; }
                 holdOwner = -1; _ = Session.StartAsync();
             }
             else if (holdOwner == -1)
@@ -214,6 +256,7 @@ internal sealed class AppController : IDisposable
         { await Session.CancelAsync(); SetNotice(message); });
         timer.Tick += (_, _) =>
         {
+            License.Refresh();
             if (Session.Phase == SessionPhase.Listening)
             {
                 overlay.SetTime(recordingTime.Elapsed);
@@ -247,6 +290,7 @@ internal sealed class AppController : IDisposable
                 _ = Session.FinishAsync();
             return;
         }
+        if (!EnsureLicense()) return;
         holdOwner = shortcut.Mode == TriggerMode.Hold ? id : null;
         _ = Session.StartAsync();
     }

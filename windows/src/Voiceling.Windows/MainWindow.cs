@@ -199,6 +199,10 @@ internal sealed class MainWindow : Window
         };
         privacy.Children.Add(startup); privacy.Children.Add(Row(Button("Open local data folder", app.OpenDataFolder)));
         privacy.Children.Add(Text("No account. No cloud transcription. No telemetry.", 20, 0));
+        var licenseStatus = Text(app.License.Status.Label, 20, 8);
+        privacy.Children.Add(licenseStatus);
+        privacy.Children.Add(Row(Button("_License and activation", app.ShowLicense)));
+        app.License.Changed += () => licenseStatus.Text = app.License.Status.Label;
 
         var models = Section("Models", "Download once, then dictate offline.");
         models.Children.Add(TitleText("Parakeet speech recognition")); models.Children.Add(modelStatus); models.Children.Add(progress);

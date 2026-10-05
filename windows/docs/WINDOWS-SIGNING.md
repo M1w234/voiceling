@@ -12,7 +12,7 @@ Microsoft Artifact Signing (formerly Trusted Signing) is the cloud alternative. 
 - [Account and identity setup](https://learn.microsoft.com/en-us/azure/artifact-signing/quickstart)
 - [Supported signing integrations and prerequisites](https://learn.microsoft.com/en-us/azure/artifact-signing/how-to-signing-integrations)
 
-The former signing account was deleted after those signed candidates. The 0.3.0 Voiceling migration candidate is unsigned; a replacement paid signing account requires owner approval. The Windows Azure CLI currently requires login. Credentials and identity documents remain outside the repository.
+October 4 migration audit: the currently installed former 0.2.2.0 app reports `NotSigned`; the historical signed 0.2.1 receipt does not describe that installed file. Azure login is restored. All enabled subscriptions were checked and no signing account remained, and no usable local code-signing certificate with a private key was found. The owner approved a replacement Basic account only if needed, and that account has now been created. Reuse of any retained identity validation, the Public Trust profile and actual signed 0.3.0 verification are still pending. Credentials and identity documents remain outside the repository.
 
 ## Prepare a Windows signing host
 

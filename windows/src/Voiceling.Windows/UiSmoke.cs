@@ -15,6 +15,53 @@ internal static class UiSmoke
             Directory.CreateDirectory(outputDirectory);
             app.Show();
             await Task.Delay(700);
+            var activationReceived = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (var activation = new ActivationPipe(value => activationReceived.TrySetResult(value)))
+            {
+                const string activationUrl = "voiceling://activate?key=invalid-test-key";
+                // Mirrors second-instance startup, which waits synchronously on the WPF thread.
+                if (!ActivationPipe.SendAsync(activationUrl).GetAwaiter().GetResult() ||
+                    await activationReceived.Task.WaitAsync(TimeSpan.FromSeconds(3)) != activationUrl)
+                    throw new InvalidOperationException("Same-user activation forwarding failed.");
+                if (await ActivationPipe.SendAsync("https://unrelated.invalid/"))
+                    throw new InvalidOperationException("Unexpected activation route was forwarded.");
+            }
+            var licenseDirectory = Path.Combine(Path.GetTempPath(), "voiceling-license-smoke-" + Guid.NewGuid().ToString("N"));
+            var license = new LicenseManager(licenseDirectory, isolated: true);
+            var trialStarted = license.Record.TrialStarted;
+            if (new LicenseManager(licenseDirectory, isolated: true).Record.TrialStarted != trialStarted)
+                throw new InvalidOperationException("Restart reset the trial.");
+            license.NoteDesklingConnected();
+            if (new LicenseManager(licenseDirectory, isolated: true).Status.Kind != LicenseKind.IncludedWithDeskling)
+                throw new InvalidOperationException("Deskling inclusion was not preserved.");
+            var saved = File.ReadAllBytes(Path.Combine(licenseDirectory, "record.bin"));
+            if (System.Text.Encoding.UTF8.GetString(saved).Contains("TrialStarted", StringComparison.Ordinal))
+                throw new InvalidOperationException("License storage was not protected.");
+            File.WriteAllBytes(Path.Combine(licenseDirectory, "record.bin"), [1, 2, 3]);
+            var corruptRejected = false;
+            try { _ = new LicenseManager(licenseDirectory, isolated: true); }
+            catch (System.Security.Cryptography.CryptographicException) { corruptRejected = true; }
+            if (!corruptRejected) throw new InvalidOperationException("Corrupt license storage restarted the trial.");
+            var licenseWindow = new LicenseWindow(app.License) { Owner = app.Window };
+            try
+            {
+                licenseWindow.Show(); licenseWindow.UpdateLayout();
+                await licenseWindow.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+                var licenseKey = Find<TextBox>(licenseWindow) ?? throw new InvalidOperationException("License key field missing.");
+                var activate = All<Button>(licenseWindow).Single(button => button.IsDefault);
+                licenseKey.Text = "invalid"; activate.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                if (!All<TextBlock>(licenseWindow).Any(text => text.Text.Contains("That key is not valid", StringComparison.Ordinal)))
+                    throw new InvalidOperationException("Invalid key feedback was not rendered.");
+                var image = new RenderTargetBitmap((int)licenseWindow.ActualWidth, (int)licenseWindow.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                image.Render(licenseWindow);
+                var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(image));
+                using var file = File.Create(Path.Combine(outputDirectory, "license.png")); encoder.Save(file);
+            }
+            finally { licenseWindow.Close(); }
+            await File.WriteAllTextAsync(Path.Combine(outputDirectory, "license-smoke.json"), JsonSerializer.Serialize(new
+            { passed = true, sharedLicenseUi = true, protectedLicenseStorage = true, trialSurvivesRestart = true,
+                desklingInclusionSurvivesRestart = true, corruptLicenseFailsClosed = true,
+                sameUserActivationForwarding = true, invalidKeyFeedback = true }, new JsonSerializerOptions { WriteIndented = true }));
             if (!app.HasShortcut) throw new InvalidOperationException("The fresh default shortcut did not register.");
             var tabs = Find<TabControl>(app.Window) ?? throw new InvalidOperationException("No settings tabs rendered.");
             var counts = new Dictionary<string, int>();
@@ -107,6 +154,9 @@ internal static class UiSmoke
             { passed = true, platform = Environment.OSVersion.ToString(), shortcutRegistered = app.HasShortcut,
                 conflictRollback = true, externalShortcutLifecycle = true, unsafeTargetRejected = true,
                 soundPresetSelection = true, allSoundAssetsDecoded = true, overlayPreservesFocus = true, inputStructBytes = 40,
+                sharedLicenseUi = true, protectedLicenseStorage = true, trialSurvivesRestart = true,
+                desklingInclusionSurvivesRestart = true, corruptLicenseFailsClosed = true,
+                sameUserActivationForwarding = true,
                 tabs = counts }, new JsonSerializerOptions { WriteIndented = true }));
             Application.Current.Shutdown(0);
         }

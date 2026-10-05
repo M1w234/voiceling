@@ -34,6 +34,9 @@ Source: "..\artifacts\publish\*"; DestDir: "{app}"; Flags: ignoreversion recurse
 Name: "{group}\voiceling"; Filename: "{app}\voiceling.exe"
 
 [Registry]
+Root: HKCU; Subkey: "Software\Classes\voiceling"; ValueType: string; ValueName: ""; ValueData: "URL:Voiceling activation"
+Root: HKCU; Subkey: "Software\Classes\voiceling"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\voiceling\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\voiceling.exe"" ""%1"""
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "Voiceling"; Flags: uninsdeletevalue
 
 [Run]
@@ -41,3 +44,16 @@ Filename: "{app}\voiceling.exe"; Description: "Open voiceling"; Flags: nowait po
 
 ; Uninstall preserves user history and the downloaded model. The app provides
 ; explicit history deletion; data location is documented in Settings and README.
+
+[Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Command: String;
+begin
+  if CurUninstallStep = usPostUninstall then begin
+    if RegQueryStringValue(HKCU, 'Software\Classes\voiceling\shell\open\command', '', Command) then begin
+      if CompareText(Command, '"' + ExpandConstant('{app}\voiceling.exe') + '" "%1"') = 0 then
+        RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\voiceling');
+    end;
+  end;
+end;

@@ -24,7 +24,8 @@ public interface ITextDelivery
 /// Native recognition may not be interruptible; keep the session busy until it ends,
 /// discard its result on cancellation, and never overlap native recognizer use.
 public sealed class DictationSession(IAudioRecorder audio, ISpeechRecognizer speech, ITextDelivery delivery,
-    Func<Settings> settings, Func<IReadOnlyList<VocabularyRule>> vocabulary, TimeSpan? previewInterval = null, ITextPolisher? polisher = null)
+    Func<Settings> settings, Func<IReadOnlyList<VocabularyRule>> vocabulary, TimeSpan? previewInterval = null, ITextPolisher? polisher = null,
+    Func<bool>? canStart = null)
 {
     public SessionPhase Phase { get; private set; }
     public string Status { get; private set; } = "Ready";
@@ -65,6 +66,9 @@ public sealed class DictationSession(IAudioRecorder audio, ISpeechRecognizer spe
     private Task StartAsync(bool external)
     {
         if (IsBusy) return Task.CompletedTask;
+        // Apply to every source before target capture, model preparation or microphone access.
+        if (canStart is not null && !canStart())
+        { Set(SessionPhase.Idle, "Activate Voiceling to continue dictating"); return Task.CompletedTask; }
         deviceAudio = external; deviceSamples = null;
         cancellation?.Dispose();
         cancellation = new CancellationTokenSource();

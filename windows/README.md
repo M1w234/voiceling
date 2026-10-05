@@ -17,6 +17,7 @@ Unsigned preview builds may receive Windows reputation warnings. A signed, hardw
 
 ## Included
 
+- Seven-day trial, $5.99 once, and included with Deskling. One purchased license key activates both Mac and Windows.
 - Local CPU speech recognition with the same Parakeet v2 model family as the Mac app.
 - Configurable key-based hold/toggle shortcuts; optional independent mouse-mapped shortcut.
 - Microphone selection, soft start/stop cues with independent volume and previews, nonactivating recording pill with level meter.
@@ -42,6 +43,8 @@ Unsigned preview builds may receive Windows reputation warnings. A signed, hardw
 Audio is held in memory and discarded after the session; it is never written to disk or uploaded. Setup contacts GitHub and its download hosts for public model files. Recognition makes no network requests. No telemetry is implemented.
 
 Settings, vocabulary, model files, and plain-text history are in `%LOCALAPPDATA%\Voiceling`. Turning History off stops saving future transcripts and keeps the latest result in memory; clear existing saved history explicitly. Uninstall preserves this directory. To remove all local data, quit the app and delete the directory yourself.
+
+Open **Privacy → License and activation**, or **License** in the tray menu, to paste your purchase key. The installer also handles `voiceling://activate?key=…` purchase links. License signatures are checked offline against the same public key used by Mac. License records are protected for the current Windows user in `%LOCALAPPDATA%\VoicelingLicensing`; reinstalling preserves the original trial and activation. Connecting a paired Deskling companion records the included entitlement, which remains available offline. An expired trial prevents new computer and screen microphone sessions; an already running session can finish normally. License sharing covers activation on both platforms; history and settings stay local to each computer.
 
 ## Build and test
 
@@ -112,4 +115,4 @@ Build a recipient candidate with `python windows/scripts/bundle-deskling.py --ba
 
 Voiceling replaces the YaprFlow application name and data location. First launch copies existing YaprFlow settings, history, vocabulary and models only when the Voiceling data directory is absent; existing Voiceling data wins and old files remain intact. The installer keeps the prior upgrade identity and carries an existing startup opt-in.
 
-The bridge uses `/api/voiceling` with a temporary older-companion fallback. Compatible Deskling firmware can send encrypted, bounded screen microphone clips for local transcription. Windows submit stays disabled. This candidate has passed 72 behavior tests; publisher signing, a signed-in desktop test, actual microphone/insertion acceptance and the upgrade rehearsal remain release gates.
+The bridge uses `/api/voiceling` with a temporary older-companion fallback. Compatible Deskling firmware can send encrypted, bounded screen microphone clips for local transcription. Windows submit stays disabled. The shared license implementation passes 80 behavior tests; publisher signing, the new activation UI checks, actual microphone/insertion acceptance and the upgrade rehearsal remain release gates.
