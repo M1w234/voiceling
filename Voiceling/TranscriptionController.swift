@@ -159,6 +159,36 @@ final class TranscriptionController {
         }
     }
 
+    private var deviceAudioSession: String?
+    private var deviceAudioPending: [Float]?
+
+    func beginDeviceAudio(session: String) {
+        guard LicenseManager.shared.canDictate else { LicenseManager.shared.presentTrialEnded(); return }
+        guard !desiredActive, !isActive, !isStarting, stopTask == nil else { return }
+        remoteSubmitContext = nil
+        deviceAudioSession = session
+        deviceAudioPending = nil
+        state.status = .preparing("Deskling microphone")
+        desiredActive = true
+        Task { @MainActor in await self.start() }
+    }
+
+    func finishDeviceAudio(session: String, samples: [Float]) {
+        guard deviceAudioSession == session, desiredActive,
+              samples.count <= DeviceAudio.maximumSamples else { return }
+        if isStarting { deviceAudioPending = samples; return }
+        guard isActive else { return }
+        sessionSamples = samples
+        deviceAudioSession = nil
+        setActive(false)
+    }
+
+    func cancelDeviceAudio(session: String? = nil) {
+        guard deviceAudioSession != nil, session == nil || deviceAudioSession == session else { return }
+        deviceAudioSession = nil; deviceAudioPending = nil
+        cancel()
+    }
+
     var isRecording: Bool { isActive }
 
     var canRemoteSubmit: Bool {
@@ -180,6 +210,7 @@ final class TranscriptionController {
     /// audio and any partial transcript, touch neither clipboard nor target
     /// app. Bound to Esc while recording.
     func cancel() {
+        deviceAudioSession = nil; deviceAudioPending = nil
         if !isActive {
             // A remote cancel can arrive while microphone permission or model
             // warmup is still suspended. Clearing desiredActive is enough for
@@ -328,6 +359,8 @@ final class TranscriptionController {
     /// if the user presses-and-releases during start()'s async warmup, start()
     /// observes desiredActive == false post-await and bails out cleanly.
     func setActive(_ active: Bool) {
+        // Local stop cannot submit an incomplete device clip.
+        if deviceAudioSession != nil { cancelDeviceAudio(); return }
         if active, !LicenseManager.shared.canDictate {
             desiredActive = false
             LicenseManager.shared.presentTrialEnded()
@@ -395,7 +428,7 @@ final class TranscriptionController {
         state.liveTranscript = ""
         // Snapshot the mode for this session so toggling the menu mid-recording
         // doesn't corrupt the pipeline.
-        sessionIsStreaming = state.streamingMode
+        sessionIsStreaming = deviceAudioSession == nil && state.streamingMode
 
         // Pick up any hand edits to vocabulary.json (cheap mtime check).
         VocabularyStore.shared.reloadIfChanged()
@@ -428,7 +461,7 @@ final class TranscriptionController {
         NotchOverlayWindowController.shared.show()
 
         do {
-            try await ensureMicPermission()
+            if deviceAudioSession == nil { try await ensureMicPermission() }
             let (_, vad) = try await ensureLoaded()
 
             // Push-to-talk race guard: if the user released the hotkey while
@@ -446,8 +479,15 @@ final class TranscriptionController {
             currentSpeechStart = nil
 
             state.status = .listening
-            try capture.start()
+            if deviceAudioSession == nil { try capture.start() }
             isActive = true
+            if let session = deviceAudioSession, let samples = deviceAudioPending {
+                deviceAudioPending = nil
+                Task { @MainActor in
+                    // start() has no further awaits after this point.
+                    self.finishDeviceAudio(session: session, samples: samples)
+                }
+            }
             ComparisonLogger.shared.recordingDidStart(sessionID: currentSessionID)
             SoundEffect.start.play()
 
@@ -489,6 +529,7 @@ final class TranscriptionController {
             }
         } catch {
             log.error("Start failed: \(error.localizedDescription)")
+            deviceAudioSession = nil; deviceAudioPending = nil
             state.status = .error(error.localizedDescription)
             scheduleAutoHide(after: 2.5)
         }

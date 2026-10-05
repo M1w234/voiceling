@@ -1,0 +1,122 @@
+# voiceling for Windows
+
+A Windows companion to the native Mac app. **Migration preview 0.3.0 — Windows 11 on Intel/AMD x64.**
+Uses local Parakeet TDT 0.6B v2 through sherpa-onnx. No account, Python installation, NVIDIA GPU, or separate .NET installation is required for the packaged app.
+
+## Get started
+
+1. Run the Windows preview setup executable, or unzip the portable build into a permanent folder and open `voiceling.exe`. Keep its DLLs alongside it.
+2. In Settings, download the speech model (460 MB; allow 2 GB free during installation). The download and model files are checked against pinned SHA-256 hashes.
+3. Wait for **Ready**. Focus a normal text field in another app.
+4. Hold **Ctrl + Alt + Space**, speak, then release. Choose **Tap to toggle** in Settings if preferred.
+5. If insertion is withheld, open **History**, select the transcript, and click **Copy transcript**.
+
+Closing the settings window leaves voiceling in the system tray. Use the tray's **Quit** command to stop it. Windows may hide the tray icon behind the overflow arrow.
+
+The private 0.3.0 candidate has valid timestamped Michael Wong publisher signatures on its app, owned assemblies, installer and uninstaller. Hardware acceptance and public publication remain separate release steps.
+
+## Included
+
+- Seven-day trial, $5.99 once, and included with Deskling. One purchased license key activates both Mac and Windows.
+- Local CPU speech recognition with the same Parakeet v2 model family as the Mac app.
+- Configurable key-based hold/toggle shortcuts; optional independent mouse-mapped shortcut.
+- Microphone selection, soft start/stop cues with independent volume and previews, nonactivating recording pill with level meter.
+- Escape, pill and tray cancel; ten-minute recording limit; no late text insertion after cancellation.
+- Original-field checks, password-field rejection, Unicode insertion that never changes the clipboard.
+- Local history (up to 200 entries), search, explicit copy/delete, and opt-out for future history.
+- Personal vocabulary, literal phrase replacements and conservative light cleanup.
+- Checksummed model setup with cancel/retry; tray behavior and optional launch at sign-in.
+- Self-contained portable package and per-user installer/uninstaller.
+
+## Intentional preview limits
+
+- Preview 0.2.0 adds streaming at speech pauses, side-specific modifier gestures/double-tap lock, optional local AI Polish, and reviewed correction suggestions. Screen context, summarization, and automatic application of learned corrections are not included.
+- With streaming off, recognition completes after release. Long audio uses bounded chunks, preferring quiet boundaries; this needs testing on continuous speech and noisy microphones.
+- Some applications expose no safely identifiable editable field. Insertion is withheld there. Administrator/elevated applications may also reject synthetic input. Recover the transcript manually; voiceling does not elevate itself, press Enter, or automatically resend.
+- Input dispatch is best-effort: a successful Windows `SendInput` call confirms dispatch, not that the receiving app accepted the text. Check the field before retrying.
+- The microphone list refreshes automatically. Selected-device reconnect and input-loss recovery still require physical hardware acceptance.
+- Windows ARM64, Windows 10, and older PCs are not validated. Minimum practical RAM/CPU guidance awaits hardware testing; no latency guarantee is made.
+- No automatic updates yet. A newer installer upgrades the same per-user location.
+
+## Privacy and local files
+
+Audio is held in memory and discarded after the session; it is never written to disk or uploaded. Setup contacts GitHub and its download hosts for public model files. Recognition makes no network requests. No telemetry is implemented.
+
+Settings, vocabulary, model files, and plain-text history are in `%LOCALAPPDATA%\Voiceling`. Turning History off stops saving future transcripts and keeps the latest result in memory; clear existing saved history explicitly. Uninstall preserves this directory. To remove all local data, quit the app and delete the directory yourself.
+
+Open **Privacy → License and activation**, or **License** in the tray menu, to paste your purchase key. The installer also handles `voiceling://activate?key=…` purchase links. License signatures are checked offline against the same public key used by Mac. License records are protected for the current Windows user in `%LOCALAPPDATA%\VoicelingLicensing`; reinstalling preserves the original trial and activation. Connecting a paired Deskling companion records the included entitlement, which remains available offline. An expired trial prevents new computer and screen microphone sessions; an already running session can finish normally. License sharing covers activation on both platforms; history and settings stay local to each computer.
+
+## Build and test
+
+Install the .NET 10 SDK. From PowerShell at the repository root:
+
+```powershell
+./windows/scripts/build.ps1
+# Also create an installer (requires Inno Setup 6):
+./windows/scripts/build.ps1 -Installer
+# Optional Windows code-signing certificate already in your certificate store:
+./windows/scripts/build.ps1 -Installer -RequireSigning -CertificateThumbprint YOUR_THUMBPRINT
+```
+
+See [publisher signing](docs/WINDOWS-SIGNING.md) for cloud signing, verification and prerequisites. Public candidates must use `-RequireSigning`.
+
+Artifacts appear under `windows/artifacts/`. The script runs behavior tests, publishes a self-contained x64 app, checks native DLLs, and creates a portable zip. CI also exercises native window rendering, model installation and real inference, and installer/uninstaller execution. CI never publishes a GitHub release.
+
+Cross-platform logic tests can run on macOS:
+
+```sh
+dotnet test windows/tests/Voiceling.Tests
+dotnet build windows/src/Voiceling.Windows -p:EnableWindowsTargeting=true
+```
+
+Real inference check using a mono 16 kHz PCM16 WAV:
+
+```sh
+dotnet run --project windows/tools/Voiceling.Smoke -- /path/to/model /path/to/sample.wav --install
+```
+
+`--archive /path/to/model.tar.bz2` supports the same checksummed installer using a previously downloaded official archive. `voiceling.exe --smoke-ui <output-directory>` renders each native tab and writes a smoke receipt, using a fresh temporary user-data folder with no personal history. This is a build verification tool, not a full keyboard/accessibility test.
+
+## Organization
+
+- `src/Voiceling.Core`: portable session state machine, persistence, settings and text processing.
+- `src/Voiceling.Speech`: pinned model distribution, verified installation, sherpa-onnx inference.
+- `src/Voiceling.Windows`: native WPF UI, Win32 hotkeys, microphone capture, UI Automation and insertion.
+- `tests/Voiceling.Tests`: cancellation/race tests, text behavior, persistence, model integrity and segmentation.
+- `docs/WINDOWS-ACCEPTANCE.md`: the physical-PC check before wider distribution.
+
+Mac remains in the existing Swift project. Vocabulary concepts and cleanup behavior match the Mac version; Windows settings use their own schema and are not directly interchangeable with the Mac preferences file. There is no cross-device synchronization.
+
+## Preview 0.2.0
+
+Choose tap-to-toggle in **Shortcuts** for direct streaming. Completed phrases are inserted when you pause; held Ctrl/Alt keys queue text until released. A live draft can change until committed. Cancel stops new insertions; words already sent remain in the destination. If focus changes, remaining text stays in History.
+
+**Models** offers an optional 610 MiB AI Polish download. Enable it in Dictation after downloading. Grammar cleanup runs entirely inside voiceling on the CPU and can slow streaming. History includes Copy original. Speech recognition works without the Polish model.
+
+**Vocabulary** can suggest corrections you make immediately after dictation. This is off by default and only observes the same non-password field for up to 20 seconds; approve a suggestion before it becomes a rule. Suggestions are not saved automatically.
+
+**Sound** supports quiet original cues, independent volume, and custom WAV imports. **Dictation** refreshes microphones automatically and remembers the selected device across reconnects. **Shortcuts** adds optional left/right Ctrl+Shift hold and double-tap lock.
+
+This preview needs hardware acceptance before public release. See docs/RELEASE-READINESS.md for evidence and remaining gates.
+
+## Preview 0.2.1
+
+A quieter sound palette and a refined native settings interface. In **Sound**, choose **Soft**, **Wood**, **Glass**, or the original **Classic**, then use **Preview start** and **Preview stop**. Soft is the new default; volume, disabled sounds and imported WAVs are preserved. Imports override the selected style until **Use selected style** is chosen for that cue.
+
+Settings now use a persistent sidebar, grouped switch rows and clearer help. The recording panel fits the draft instead of reserving empty space. Native keyboard navigation, high-contrast settings, and nonactivating recording controls remain in place.
+
+## Deskling screen controls (0.2.2)
+
+Keep the paired Deskling companion and voiceling open. The Windows app connects outbound to the companion on `127.0.0.1:8737`; no new firewall port is opened by voiceling. The screen can start, stop, toggle and cancel recording. Audio and transcripts remain in voiceling. Submit stays disabled on Windows; review and send text yourself. Streaming is optional. A relay outage cancels a recording started through the screen.
+
+Build a recipient candidate with `python windows/scripts/bundle-deskling.py --base <existing-Windows-Deskling-package> --installer <verified-signed-setup.exe> --output <new-output-folder>`. The output must not exist. Verify the final archive on Windows and complete physical pairing/button acceptance before gifting.
+
+## Migration preview 0.3.0
+
+Voiceling replaces the YaprFlow application name and data location. First launch copies existing YaprFlow settings, history, vocabulary and models only when the Voiceling data directory is absent; existing Voiceling data wins and old files remain intact. The installer keeps the prior upgrade identity and carries an existing startup opt-in.
+
+The bridge uses `/api/voiceling` with a temporary older-companion fallback. Compatible Deskling firmware can send encrypted, bounded screen microphone clips for local transcription. Windows submit stays disabled. All 80 behavior tests and full Windows CI pass, including activation UI and installer/uninstaller checks. The private preview was installed on the existing Windows PC: first launch preserved all eight original data files exactly, connected with device audio capability, and displayed its included Deskling license. The active old app was uninstalled after verified recovery copies. The signed upgrade from the freshly extracted Deskling recipient archive preserved all eight original data files, protected license data and startup preference. The installed signed app launched normally, remained connected and showed its included entitlement. Physical microphone/insertion acceptance and completed purchase/inbox receipt remain release gates.
+
+## Owner acceptance, October 4, 2026 HST
+
+Michael confirmed Unit A works on USB and battery power without false top-button presses, and dictation using the saved shortcuts and Unit A microphone inserts and cancels correctly in Mac TextEdit and Windows Notepad. The earlier sandbox purchase delivered both customer and owner receipts. Its actual purchased key passes Mac production activation/persistence checks and the Windows production verifier with an expired trial and no Deskling entitlement. Broader application coverage and Intel laptop performance remain unmeasured; Windows is distributed as a preview with manual Submit.

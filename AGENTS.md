@@ -6,12 +6,12 @@ Local-first macOS menubar dictation app, part of the Deskling family. Originally
 
 | Thing | Where |
 |-------|-------|
-| Source | `~/yaprflow/` (this repo) |
-| Built app | `~/yaprflow/build.noindex/Build/Products/Release/Voiceling.app` |
+| Source | `~/deskling/voiceling/` (this repo) |
+| Built app | `~/deskling/voiceling/build.noindex/Build/Products/Release/Voiceling.app` |
 | Installed app | `/Applications/Voiceling.app` |
 | Bundle ID | `com.teamwong.voiceling` |
 | Saved hotkey config | `~/Library/Containers/com.teamwong.voiceling/Data/Library/Preferences/com.teamwong.voiceling.plist` |
-| Speech models | `~/yaprflow/Models/parakeet-tdt-0.6b-v2/` plus `Models/silero-vad/` (gitignored) |
+| Speech models | `~/deskling/voiceling/Models/parakeet-tdt-0.6b-v2/` plus `Models/silero-vad/` (gitignored) |
 | Signing | Developer ID for releases; local self-signed identity for dev builds. |
 | Friend build | Notarized `build/Voiceling.dmg` via `scripts/release.sh` |
 
@@ -20,7 +20,7 @@ Local-first macOS menubar dictation app, part of the Deskling family. Originally
 One command:
 
 ```bash
-cd ~/yaprflow && ./scripts/dev-build.sh
+cd ~/deskling/voiceling && ./scripts/dev-build.sh
 ```
 
 Quits running Voiceling, builds Release, applies the stable local signing identity
@@ -92,7 +92,7 @@ when changing them:
 - **Apple silicon only** — the MLX dependencies and distributed executable
   target arm64. Friend-facing docs must say M1 or newer and macOS 14+.
 - **Metal Toolchain** — Xcode 16+ ships without it by default. If a fresh Xcode install fails the first build with `cannot execute tool 'metal'`, run `xcodebuild -downloadComponent MetalToolchain` (~700 MB one-time).
-- **Models** — the Parakeet ASR and Silero VAD models under `~/yaprflow/Models/`
+- **Models** — the Parakeet ASR and Silero VAD models under `~/deskling/voiceling/Models/`
   must exist before a fully offline build. `scripts/fetch-models.sh` downloads
   both with `huggingface-cli` and
   deliberately rejects the unrelated Higgsfield executable that also uses the
@@ -100,7 +100,7 @@ when changing them:
   ```bash
   HF_HUB_DISABLE_XET=1 huggingface-cli download FluidInference/parakeet-tdt-0.6b-v2-coreml \
     --include "Preprocessor.mlmodelc/*" "Encoder.mlmodelc/*" "Decoder.mlmodelc/*" "JointDecision.mlmodelc/*" "parakeet_vocab.json" \
-    --local-dir ~/yaprflow/Models/parakeet-tdt-0.6b-v2
+    --local-dir ~/deskling/voiceling/Models/parakeet-tdt-0.6b-v2
   ```
 - **First recording delay** — ~30s on a cold launch while the Parakeet Encoder compiles. `TranscriptionController.preload()` runs at launch to warm this in the background.
 - **Mic permission** — granted in System Settings → Privacy → Microphone

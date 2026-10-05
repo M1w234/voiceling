@@ -8,8 +8,8 @@ enum LicenseConfig {
     /// Ed25519 public key that verifies license keys. The private half signs a key after a
     /// paid Stripe checkout on the Deskling site and never enters this repository.
     static let publicKey = Data(base64Encoded: "dO0F70peudpqiHiFKYq3nxt2Ix6VvSIJPGmERLKMzow=")!
-    /// The Stripe Payment Link. nil until it exists, which keeps the Buy button disabled.
-    static let checkoutURL: URL? = nil
+    /// Stable storefront route; checkout availability is controlled server-side.
+    static let checkoutURL = URL(string: "https://deskling-site.vercel.app/voiceling#get")
     static let price = "$5.99"
     static let trialDays = 7
 }
