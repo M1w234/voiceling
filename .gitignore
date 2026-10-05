@@ -21,3 +21,6 @@ Models/
 # Personal Claude Code workflow files (not relevant to the project)
 .claude/
 CLAUDE.md
+# Python migration helpers
+__pycache__/
+*.pyc

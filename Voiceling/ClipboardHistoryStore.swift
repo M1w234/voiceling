@@ -71,9 +71,9 @@ final class ClipboardHistoryStore: ObservableObject {
     @Published private(set) var entries: [ClipboardHistoryEntry] = []
 
     /// Soft cap. Pinned entries are kept beyond this; unpinned overflow is
-    /// evicted oldest-first. 500 is enough for ~weeks of heavy dictation
-    /// while keeping the JSON small (~MB at the high end).
-    private let maxEntries = 500
+    /// evicted oldest-first. Migration raises the capacity to retain the union
+    /// of both histories rather than immediately trimming imported entries.
+    private let maxEntries = max(500, UserDefaults.standard.integer(forKey: "voiceling.historyCapacity"))
 
     private let storeURL: URL
     private var lastCapturedText: String = ""
