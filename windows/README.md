@@ -1,6 +1,6 @@
 # voiceling for Windows
 
-A Windows companion to the native Mac app. **Preview 0.2.1 — Windows 11 on Intel/AMD x64.**
+A Windows companion to the native Mac app. **Migration preview 0.3.0 — Windows 11 on Intel/AMD x64.**
 Uses local Parakeet TDT 0.6B v2 through sherpa-onnx. No account, Python installation, NVIDIA GPU, or separate .NET installation is required for the packaged app.
 
 ## Get started
@@ -107,3 +107,9 @@ Settings now use a persistent sidebar, grouped switch rows and clearer help. The
 Keep the paired Deskling companion and voiceling open. The Windows app connects outbound to the companion on `127.0.0.1:8737`; no new firewall port is opened by voiceling. The screen can start, stop, toggle and cancel recording. Audio and transcripts remain in voiceling. Submit stays disabled on Windows; review and send text yourself. Streaming is optional. A relay outage cancels a recording started through the screen.
 
 Build a recipient candidate with `python windows/scripts/bundle-deskling.py --base <existing-Windows-Deskling-package> --installer <verified-signed-setup.exe> --output <new-output-folder>`. The output must not exist. Verify the final archive on Windows and complete physical pairing/button acceptance before gifting.
+
+## Migration preview 0.3.0
+
+Voiceling replaces the YaprFlow application name and data location. First launch copies existing YaprFlow settings, history, vocabulary and models only when the Voiceling data directory is absent; existing Voiceling data wins and old files remain intact. The installer keeps the prior upgrade identity and carries an existing startup opt-in.
+
+The bridge uses `/api/voiceling` with a temporary older-companion fallback. Compatible Deskling firmware can send encrypted, bounded screen microphone clips for local transcription. Windows submit stays disabled. This candidate has passed 72 behavior tests; publisher signing, a signed-in desktop test, actual microphone/insertion acceptance and the upgrade rehearsal remain release gates.
