@@ -1,6 +1,6 @@
 # Windows parity and release readiness
 
-Migration candidate 0.3.0, October 4, 2026: all 72 behavior tests pass. The installer is private and unsigned pending a replacement signing account. Native UI and microphone acceptance require a signed-in desktop; they are not verified for this renamed candidate.
+Migration candidate 0.3.0, October 4, 2026: all 80 behavior tests and [full Windows CI at f0a9020](https://github.com/M1w234/voiceling/actions/runs/37266114388) pass, including native settings and license UI, activation forwarding, protected license storage, restart preservation, real offline speech/Polish inference, and installer/uninstaller checks. Windows uses the same $5.99 one-time offer, seven-day trial, Deskling inclusion and shared offline license key as Mac. Native licensing checks also pass on the AMD desktop; its Task Scheduler UI harness could not acquire foreground focus for the wider self-target check. The approved replacement Basic signing account now exists, but retained identity validation/profile setup and signing remain pending. The installer is private and unsigned; physical microphone/insertion and the signed upgrade still need acceptance.
 
 The 0.2.x evidence below describes the earlier YaprFlow baseline. It is retained as history and does not establish acceptance of 0.3.0.
 
