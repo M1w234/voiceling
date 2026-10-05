@@ -81,6 +81,9 @@ internal static class UiSmoke
             if (Marshal.SizeOf<Native.INPUT>() != 40) throw new InvalidOperationException("Wrong x64 INPUT layout.");
             var delivery = new TextDelivery();
             app.Window.Activate();
+            await app.Window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+            if (Native.GetForegroundWindow() != hwnd)
+                throw new InvalidOperationException("Settings could not gain foreground focus. Run this check from the signed-in desktop; self-target rejection was not tested.");
             if (await delivery.CaptureTargetAsync() is not null)
                 throw new InvalidOperationException("The app must not target its own settings window.");
             var withheld = await delivery.DeliverAsync("must not be sent", null, CancellationToken.None);
