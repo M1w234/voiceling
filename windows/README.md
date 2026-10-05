@@ -13,7 +13,7 @@ Uses local Parakeet TDT 0.6B v2 through sherpa-onnx. No account, Python installa
 
 Closing the settings window leaves voiceling in the system tray. Use the tray's **Quit** command to stop it. Windows may hide the tray icon behind the overflow arrow.
 
-Unsigned preview builds may receive Windows reputation warnings. A signed, hardware-tested public release is a separate release step; do not advertise this preview as production-ready.
+The private 0.3.0 candidate has valid timestamped Michael Wong publisher signatures on its app, owned assemblies, installer and uninstaller. Hardware acceptance and public publication remain separate release steps.
 
 ## Included
 
@@ -115,4 +115,4 @@ Build a recipient candidate with `python windows/scripts/bundle-deskling.py --ba
 
 Voiceling replaces the YaprFlow application name and data location. First launch copies existing YaprFlow settings, history, vocabulary and models only when the Voiceling data directory is absent; existing Voiceling data wins and old files remain intact. The installer keeps the prior upgrade identity and carries an existing startup opt-in.
 
-The bridge uses `/api/voiceling` with a temporary older-companion fallback. Compatible Deskling firmware can send encrypted, bounded screen microphone clips for local transcription. Windows submit stays disabled. All 80 behavior tests and full Windows CI pass, including activation UI and installer/uninstaller checks. The private preview was installed on the existing Windows PC: first launch preserved all eight original data files exactly, connected with device audio capability, and displayed its included Deskling license. The active old app was uninstalled after verified recovery copies. Publisher signing, signed upgrade verification, physical microphone/insertion acceptance and completed purchase/inbox receipt remain release gates.
+The bridge uses `/api/voiceling` with a temporary older-companion fallback. Compatible Deskling firmware can send encrypted, bounded screen microphone clips for local transcription. Windows submit stays disabled. All 80 behavior tests and full Windows CI pass, including activation UI and installer/uninstaller checks. The private preview was installed on the existing Windows PC: first launch preserved all eight original data files exactly, connected with device audio capability, and displayed its included Deskling license. The active old app was uninstalled after verified recovery copies. The signed upgrade from the freshly extracted Deskling recipient archive preserved all eight original data files, protected license data and startup preference. The installed signed app launched normally, remained connected and showed its included entitlement. Physical microphone/insertion acceptance and completed purchase/inbox receipt remain release gates.
