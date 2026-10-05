@@ -53,3 +53,11 @@ The signed 0.2.2 app, own assemblies, installer and generated uninstaller passed
 - Signed Deskling installer upgrade and uninstall/reinstall passed on the PC. Pairing key, pairing record, voiceling settings and history hashes were preserved. Owned startup task removed on uninstall and restored on reinstall.
 - Production speech engine transcribed a synthetic test sentence while its process had all outbound network access blocked; blocked HTTP probe confirmed the offline condition. No user recording used.
 - No claims of fresh-recipient acceptance, Intel hardware acceptance, or broad public readiness are implied by the AMD/Unit A tests. Streaming is not a release gate.
+
+## October 5 migration installation
+
+The 0.3.0 application code at `f0a9020` passed all 80 behavior tests and full Windows CI: native UI/shortcut/activation checks, real offline speech and Polish models, and installer/uninstaller execution. The tested private preview was installed on the existing AMD desktop after verified recovery copies of the prior app and data. First launch preserved all eight original data files exactly. The installed app connected to the canonical companion with encrypted device audio capability and showed “Included with your Deskling.” The active old application is removed; original data and private recovery files remain.
+
+Unit A received `gift-20261005-voiceling` through USB on its verified active app partition. Exact app readback passed; bootloader, partition table, NVS pairing/settings and OTA selection were unchanged. It reconnected to the same Windows companion. The firmware preserves the newer Vitals dial and button/display repairs and passes 1,121 Python tests plus compiled C checks.
+
+This installed Windows preview is **unsigned and private**. The historical signed 0.2.2 receipt above is not evidence for the later installed 0.2.2.0 file, which was inspected as `NotSigned` before this upgrade. The approved replacement Basic signing account exists, but its Public Trust identity/profile still needs completion. Publisher trust and signed upgrade verification, current physical audio/button/insertion acceptance, the Intel acceptance pass, and completed purchase/activation/inbox receipt remain pending. No public release was published by this installation.
